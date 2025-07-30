@@ -1,0 +1,15 @@
+@media (min-width: 1024px) {
+    .container {
+        background-image: url('../imgs/login_img_pc.png');
+        background-repeat: no-repeat;
+        background-position: right;
+        background-attachment: fixed;
+        object-fit: fill;
+        background-size: cover;
+        height: 100vh;
+    }
+
+    .pc_form {
+        background-color: rgba(255, 255, 255, 0.868);
+    }
+}

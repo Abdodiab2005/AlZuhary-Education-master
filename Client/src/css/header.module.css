@@ -1,0 +1,19 @@
+@media (min-width: 768px) {
+    .badge {
+        position: relative;
+    }
+
+    .badge::before {
+        content: 'تيم المادة العلمية';
+        position: absolute;
+        left: 100%;
+        top: 10%;
+        padding: 4px;
+        color: black;
+        text-align: center;
+        width: 150px;
+        border-radius: 0px 10px 10px 0px;
+        background-color: white;
+        transform: translateX(-8px);
+    }
+}

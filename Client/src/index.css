@@ -1,0 +1,97 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+@font-face {
+  font-family: School;
+  src: url(../src/fonts/GraphicSchool.ttf);
+}
+
+@font-face {
+  font-family: Tido;
+  src: url(../src/fonts/TIDO.ttf)
+}
+
+@import "tailwindcss";
+
+@theme {
+  --font-GraphicSchool: School, "sans-serif";
+  --font-TIDO: Tido, "sans-serif";
+  --color-bluetheme-500: #0084FF;
+}
+
+body button {
+  cursor: pointer;
+}
+
+.head1 {
+  font-size: clamp(1.5rem, 3.5vw, 2rem);
+}
+
+.head2 {
+  font-size: clamp(1.2rem, 2.5vw, 1.9rem);
+}
+
+.labels {
+  font-size: clamp(13px, 1.5vw, 2rem);
+}
+
+.btns {
+  font-size: clamp(0.8rem, 1.8vw, 30px);
+}
+
+.btns:hover {
+  scale: 1.01;
+  transition-timing-function: ease-in-out;
+  transition-duration: 0.2s;
+}
+
+.icons {
+  font-size: clamp(1.5rem, 2.1vw, 33px);
+  font-weight: bolder;
+}
+
+.icons:hover {
+  scale: 1.2;
+  transition-timing-function: ease-in-out;
+  transition-duration: 0.2s;
+}
+
+.spans {
+  font-size: clamp(0.9rem, 2.3vw, 2.4rem);
+}
+.price{
+  font-size: clamp(0.9rem , 1.1vw , 1.8rem);
+}
+.buy{
+  font-size: clamp(0.65rem , 1.4vw , 1rem);
+}
+.course{
+  font-size: clamp(0.8rem , 3vw , 1.6rem);
+}
+.enter{
+  font-size: clamp(0.8rem , 2vw , 1.3rem);
+}
+.content{
+  font-size: clamp(0.6rem , 1.3vw , 0.8rem);
+}
+.month_price{
+  font-size: clamp(0.5rem , 1.1vw , 0.7rem);
+}
+button:hover{
+  scale: 1.009;
+  transition-duration: 0.2s;
+}
+.nav-btn{
+  font-size: clamp(0.2rem , 1.5vw , 0.8rem);
+}
+.nav-icons{
+  font-size: clamp(0.8rem , 2vw , 1.2rem);
+}
+.year{
+  font-size: clamp(0.55rem , 0.8rem , 1.1rem);
+}
