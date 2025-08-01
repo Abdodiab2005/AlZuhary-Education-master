@@ -2,6 +2,7 @@ import { IoClose, IoSend } from "react-icons/io5";
 import { Link } from "react-router-dom";
 import { useState } from 'react';
 import axios from 'axios';
+import API_BASE_URL from '../apiConfig';
 
 export default function Reset_pass() {
     const [phone, setPhone] = useState('');
