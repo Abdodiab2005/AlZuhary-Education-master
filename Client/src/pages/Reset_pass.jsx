@@ -12,7 +12,7 @@ export default function Reset_pass() {
         setError('');
         setResult(null);
         try {
-            const res = await axios.post(`${API_BASE_URL}/auth/request-password-reset`, { phoneNumber: phone });
+            const res = await axios.post(`${API_BASE_URL}/api/auth/request-password-reset`, { phoneNumber: phone });
             setResult(res.data.name);
         } catch (err) {
             setError(err.response?.data?.message || 'حدث خطأ');
