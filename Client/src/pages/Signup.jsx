@@ -10,7 +10,9 @@ export default function Signup() {
     const phoneRef = useRef();
     const parentPhoneRef = useRef();
     const centerRef = useRef();
-    const gradeRef = useRef();
+    const grade1Ref = useRef();
+    const grade2Ref = useRef();
+    const grade3Ref = useRef();
     const passRef = useRef();
     const pass2Ref = useRef();
     const navigate = useNavigate();
@@ -22,12 +24,22 @@ export default function Signup() {
             return;
         }
         try {
+            // تحديد المرحلة الدراسية المختارة
+            let selectedGrade = '';
+            if (grade1Ref.current.checked) {
+                selectedGrade = grade1Ref.current.value;
+            } else if (grade2Ref.current.checked) {
+                selectedGrade = grade2Ref.current.value;
+            } else if (grade3Ref.current.checked) {
+                selectedGrade = grade3Ref.current.value;
+            }
+            
             await axios.post(`${API_BASE_URL}/api/auth/signup`, {
                 name: nameRef.current.value,
                 phoneNumber: phoneRef.current.value,
                 parentPhoneNumber: parentPhoneRef.current.value,
                 center: centerRef.current.value,
-                grade: gradeRef.current.value,
+                grade: selectedGrade,
                 password: passRef.current.value,
                 type: 'Student'
             });
@@ -79,15 +91,15 @@ export default function Signup() {
                     <section className='flex justify-center items-center gap-2'>
                         <div className='flex justify-center items-center gap-0.5'>
                             <label className='bg-bluetheme-500 text-white rounded-[5px] p-1 text-[12px] md:text-[15px]'>أولى ثانوي</label>
-                            <input name='grade' type="radio" value="أولى ثانوي" ref={gradeRef} />
+                            <input name='grade' type="radio" value="أولى ثانوي" ref={grade1Ref} />
                         </div>
                         <div className='flex justify-center items-center gap-0.5'>
                             <label className='bg-bluetheme-500 text-white rounded-[5px] p-1 text-[12px] md:text-[15px]'>تانية ثانوي</label>
-                            <input name='grade' type="radio" value="تانية ثانوي" ref={gradeRef} />
+                            <input name='grade' type="radio" value="تانية ثانوي" ref={grade2Ref} />
                         </div>
                         <div className='flex justify-center items-center gap-0.5'>
                             <label className='bg-bluetheme-500 text-white rounded-[5px] p-1 text-[12px] md:text-[15px]'>تالتة ثانوي</label>
-                            <input name='grade' type="radio" value="تالتة ثانوي" ref={gradeRef} />
+                            <input name='grade' type="radio" value="تالتة ثانوي" ref={grade3Ref} />
                         </div>
                     </section>
                 </div>
