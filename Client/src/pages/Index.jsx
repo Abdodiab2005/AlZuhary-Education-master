@@ -50,7 +50,14 @@ export default function Index() {
         axios.get(`${API_BASE_URL}/api/courses`, {
             headers: { Authorization: `Bearer ${token}` }
         })
-            .then(res => setCourses(res.data))
+            .then(res => {
+                // التأكد من أن كل كورس يحتوي على الدروس
+                const coursesWithLessons = res.data.map(course => ({
+                    ...course,
+                    lessons: course.lessons || []
+                }));
+                setCourses(coursesWithLessons);
+            })
             .catch(() => setCourses([]));
     }, [navigate]);
 
@@ -68,7 +75,7 @@ export default function Index() {
             const res = await axios.post(`${API_BASE_URL}/api/courses`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
             });
-            setCourses([...courses, res.data]);
+            setCourses([...courses, { ...res.data, lessons: res.data.lessons || [] }]);
             setNewCourse({ name: '', price: '', image: '', description: '' });
             setImageFile(null);
             setPlaylist(false);
@@ -128,7 +135,7 @@ export default function Index() {
             const res = await axios.put(`${API_BASE_URL}/api/courses/${editCourse._id}`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
-            setCourses(courses => courses.map(c => c._id === editCourse._id ? res.data : c));
+            setCourses(courses => courses.map(c => c._id === editCourse._id ? { ...res.data, lessons: res.data.lessons || c.lessons || [] } : c));
             setEditCourse(null);
         } catch (err) {
             window.alert('حدث خطأ أثناء تعديل الكورس');
@@ -209,7 +216,7 @@ export default function Index() {
                             {course.description && (
                                 <p className='text-gray-700 text-sm mt-1 mb-2'>{course.description}</p>
                             )}
-                            <span className='content text-gray-700'>يتكون الكورس من {course.lessons ? course.lessons.length : 0} محاضرات</span>
+                            <span className='content text-gray-700'>يتكون الكورس من {course.lessons && Array.isArray(course.lessons) ? course.lessons.length : 0} محاضرات</span>
                             <span className='content text-gray-700'>محاضرة اسبوعيا - الواجبات</span>
                             <button className='bg-bluetheme-500 text-white rounded-lg p-1 enter mt-1 mb-1 labels' onClick={() => window.location.assign(`/course/${course._id}`)}>دخول الكورس</button>
                             <span className='bg-bluetheme-500 rounded-[10px] flex justify-center items-center p-1 gap-2 text-white month_price mt-1 mb-1'>

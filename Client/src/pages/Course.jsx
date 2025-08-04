@@ -281,11 +281,11 @@ export default function Course() {
         try {
             const formData = new FormData();
             formData.append('title', newLesson.title);
-            formData.append('price', newLesson.price);
+            formData.append('price', parseInt(newLesson.price) || 0);
             formData.append('videoUrl', newLesson.videoUrl);
             formData.append('assignmentUrl', newLesson.assignmentUrl);
-            formData.append('viewLimit', newLesson.viewLimit);
-            formData.append('viewPrice', newLesson.viewPrice);
+            formData.append('viewLimit', parseInt(newLesson.viewLimit) || 5);
+            formData.append('viewPrice', parseInt(newLesson.viewPrice) || 10);
             if (imageFile) {
                 formData.append('image', imageFile);
             }
@@ -306,7 +306,7 @@ export default function Course() {
             }
 
             setLessons([...lessons, res.data]);
-            setNewLesson({ title: '', price: '', videoUrl: '', assignmentUrl: '' });
+            setNewLesson({ title: '', price: '', videoUrl: '', assignmentUrl: '', viewLimit: 5, viewPrice: 10 });
             setImageFile(null);
             setLesson(false);
         } catch (err) {
@@ -386,8 +386,8 @@ export default function Course() {
             videoUrl: lesson.videoUrl || '',
             assignmentUrl: lesson.assignmentUrl || '',
             image: null,
-            viewLimit: lesson.viewLimit || 5,
-            viewPrice: lesson.viewPrice || 10
+            viewLimit: parseInt(lesson.viewLimit) || 5,
+            viewPrice: parseInt(lesson.viewPrice) || 10
         });
     };
 
@@ -396,9 +396,11 @@ export default function Course() {
         if (name === 'image') {
             setEditForm({ ...editForm, image: files[0] });
         } else if (name === 'viewLimit') {
-            setEditForm({ ...editForm, [name]: value === '' ? '' : parseInt(value) || 5 });
+            setEditForm({ ...editForm, [name]: value === '' ? 5 : parseInt(value) || 5 });
         } else if (name === 'viewPrice') {
-            setEditForm({ ...editForm, [name]: value === '' ? '' : parseInt(value) || 10 });
+            setEditForm({ ...editForm, [name]: value === '' ? 10 : parseInt(value) || 10 });
+        } else if (name === 'price') {
+            setEditForm({ ...editForm, [name]: value === '' ? '' : parseInt(value) || 0 });
         } else {
             setEditForm({ ...editForm, [name]: value });
         }
@@ -409,11 +411,11 @@ export default function Course() {
         try {
             const formData = new FormData();
             formData.append('title', editForm.title);
-            formData.append('price', editForm.price);
+            formData.append('price', parseInt(editForm.price) || 0);
             formData.append('videoUrl', editForm.videoUrl);
             formData.append('assignmentUrl', editForm.assignmentUrl);
-            formData.append('viewLimit', editForm.viewLimit);
-            formData.append('viewPrice', editForm.viewPrice);
+            formData.append('viewLimit', parseInt(editForm.viewLimit) || 5);
+            formData.append('viewPrice', parseInt(editForm.viewPrice) || 10);
             if (editForm.image) {
                 formData.append('image', editForm.image);
             }
@@ -718,8 +720,8 @@ export default function Course() {
                     const key = `${lesson._id}-${forceUpdate}`;
                     
                     // منطق إظهار الفيديو والواجب
-                    const showVideo = lessonUnlocked && (courseUnlocked || (lessonActivation && lessonActivation.video));
-                    const showAssignment = lessonUnlocked && (courseUnlocked || (lessonActivation && lessonActivation.assignment));
+                    const showVideo = lessonUnlocked && lesson.videoUrl;
+                    const showAssignment = lesson.assignmentUrl; // زر الواجب يظهر دائماً إذا كان موجود
                     
                     // التحقق من أن الدرس مشترى (للتحكم في عرض زر الشراء)
                     const isLessonPurchased = courseUnlocked || (lessonActivation && (lessonActivation.video || lessonActivation.assignment));
@@ -756,7 +758,7 @@ export default function Course() {
                                 <span className='bg-white p-1.5 rounded-lg text-center labels'>السعر: {lesson.price} جنيه</span>
                                 {(showVideo || showAssignment) ? (
                                     <>
-                                        {showAssignment && lesson.assignmentUrl && (
+                                        {showAssignment && (
                                             <button className='absolute top-[100%] text-bluetheme-500 rounded-b-2xl border-4 border-t-0 p-3 border-bluetheme-500 text-center transition-all duration-[0.2s] ease-in-out hover:bg-bluetheme-500 hover:text-white'
                                                 onClick={() => navigate(`/course/${courseId}/lesson/${lesson._id}`, { state: { videoUrl: lesson.assignmentUrl, isAssignment: true } })}>
                                                 واجب الحصة
