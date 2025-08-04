@@ -412,6 +412,14 @@ export default function Course() {
 
     const handleEditSave = async () => {
         const token = localStorage.getItem('token');
+        if (!editLesson || !editLesson._id) {
+            window.alert('لم يتم تحديد درس للتعديل');
+            return;
+        }
+        if (!courseId) {
+            window.alert('معرف الكورس غير موجود');
+            return;
+        }
         try {
             const formData = new FormData();
             formData.append('title', editForm.title);
@@ -433,13 +441,19 @@ export default function Course() {
 
             setLessons(lessons.map(l => l._id === editLesson._id ? res.data : l));
             setEditLesson(null);
+            setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10 });
         } catch (err) {
+            console.error('Error editing lesson:', err);
             window.alert('حدث خطأ أثناء تعديل الدرس');
         }
     };
 
     const handleDeleteLesson = async (lessonId) => {
         const token = localStorage.getItem('token');
+        if (!courseId) {
+            window.alert('معرف الكورس غير موجود');
+            return;
+        }
         if (window.confirm('هل أنت متأكد من حذف هذا الدرس؟')) {
             try {
                 await axios.delete(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`, {
@@ -447,6 +461,7 @@ export default function Course() {
                 });
                 setLessons(lessons.filter(l => l._id !== lessonId));
             } catch (err) {
+                console.error('Error deleting lesson:', err);
                 window.alert('حدث خطأ أثناء حذف الدرس');
             }
         }
