@@ -10,6 +10,7 @@ import { MdEdit } from 'react-icons/md';
 import Delete_btn from '../components/Delete_btn';
 import axios from 'axios';
 import API_BASE_URL from '../apiConfig';
+import { checkTokenValidity, getAuthHeaders } from '../utils/tokenHandler';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { FaLock } from 'react-icons/fa';
 
@@ -45,8 +46,16 @@ export default function Course() {
     }, [navigate]);
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
+        const initializeData = async () => {
+            // التحقق من صلاحية الـ token أولاً
+            const isTokenValid = await checkTokenValidity();
+            if (!isTokenValid) {
+                navigate('/login');
+                return;
+            }
+
+            const headers = getAuthHeaders();
+            
             // التحقق من حالة الخادم أولاً
             axios.get(`${API_BASE_URL}/api/health`)
                 .then(() => {
@@ -57,16 +66,12 @@ export default function Course() {
                 });
             
             // جلب رصيد المستخدم
-            axios.get(`${API_BASE_URL}/api/recharge/balance`, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
+            axios.get(`${API_BASE_URL}/api/recharge/balance`, { headers })
             .then(res => setBalance(res.data.credits || 0))
             .catch(() => setBalance(0));
 
             // جلب الدروس والكورسات المشتراة
-            axios.get(`${API_BASE_URL}/api/auth/me`, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
+            axios.get(`${API_BASE_URL}/api/auth/me`, { headers })
             .then(res => {
                 setPurchasedLessons(res.data.purchasedLessons || []);
                 setPurchasedCourses(res.data.purchasedCourses || []);
@@ -80,7 +85,9 @@ export default function Course() {
                 setWatchedLessons([]);
                 setExamScores([]);
             });
-        }
+        };
+
+        initializeData();
 
         // جلب بيانات الكورس والدروس
         if (courseId) {

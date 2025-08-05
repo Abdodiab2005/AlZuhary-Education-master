@@ -48,8 +48,28 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// جلب جميع الكورسات
-router.get('/', async (req, res) => {
+// جلب جميع الكورسات مع فلترة حسب السنة الدراسية للطالب
+router.get('/', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    let courses;
+    
+    // إذا كان المستخدم طالب، اعرض فقط الكورسات المناسبة لسنه الدراسية
+    if (user && user.type === 'Student' && user.grade) {
+      courses = await Course.find({ grade: user.grade });
+    } else {
+      // للمدرسين والأدمن، اعرض كل الكورسات
+      courses = await Course.find();
+    }
+    
+    res.json(courses);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// جلب جميع الكورسات بدون فلترة (للتوافق مع الكود القديم)
+router.get('/public', async (req, res) => {
   try {
     const courses = await Course.find();
     res.json(courses);
@@ -61,6 +81,20 @@ router.get('/', async (req, res) => {
 // التحقق من حالة الخادم
 router.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'Server is running' });
+});
+
+// جلب جميع الكورسات (للأدمن والمدرسين)
+router.get('/all', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (user.type !== 'Admin' && user.type !== 'Teacher') {
+      return res.status(403).json({ message: 'غير مصرح' });
+    }
+    const courses = await Course.find();
+    res.json(courses);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
 });
 
 // إضافة كورس جديد مع دعم رفع صورة

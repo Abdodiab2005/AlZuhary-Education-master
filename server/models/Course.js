@@ -16,6 +16,7 @@ const courseSchema = new mongoose.Schema({
   description: { type: String },
   image: { type: String },
   price: { type: Number, required: true },
+  grade: { type: String, enum: ['أولى ثانوي', 'تانية ثانوي', 'تالتة ثانوي'], required: true },
   lessons: [lessonSchema]
 }, { timestamps: true });
 

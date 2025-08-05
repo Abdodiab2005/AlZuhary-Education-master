@@ -6,6 +6,7 @@ import NotActive from "../components/NotActive";
 import { IoSearch } from "react-icons/io5";
 import axios from 'axios';
 import API_BASE_URL from '../apiConfig';
+import { checkTokenValidity, getAuthHeaders } from '../utils/tokenHandler';
 import Bottom_nav from "../components/Bottom_nav";
 import { useNavigate } from "react-router-dom";
 
@@ -34,21 +35,32 @@ export default function Users() {
 
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        const userType = localStorage.getItem('userType');
-        if (!token || (userType !== 'Admin' && userType !== 'Teacher')) {
-            navigate('/login');
-        }
-        axios.get(`${API_BASE_URL}/api/users`, {
-            headers: { Authorization: `Bearer ${token}` }
-        })
-            .then(res => setUsers(res.data))
-            .catch(() => setUsers([]));
-        axios.get(`${API_BASE_URL}/api/courses`, {
-            headers: { Authorization: `Bearer ${token}` }
-        })
-            .then(res => setCourses(res.data))
-            .catch(() => setCourses([]));
+        const initializeData = async () => {
+            const userType = localStorage.getItem('userType');
+            if (userType !== 'Admin' && userType !== 'Teacher') {
+                navigate('/login');
+                return;
+            }
+
+            // التحقق من صلاحية الـ token أولاً
+            const isTokenValid = await checkTokenValidity();
+            if (!isTokenValid) {
+                navigate('/login');
+                return;
+            }
+
+            const headers = getAuthHeaders();
+            
+            axios.get(`${API_BASE_URL}/api/users`, { headers })
+                .then(res => setUsers(res.data))
+                .catch(() => setUsers([]));
+                
+            axios.get(`${API_BASE_URL}/api/courses/all`, { headers })
+                .then(res => setCourses(res.data))
+                .catch(() => setCourses([]));
+        };
+
+        initializeData();
     }, [navigate]);
 
     const sortedUsers = [...users].sort((a, b) => {

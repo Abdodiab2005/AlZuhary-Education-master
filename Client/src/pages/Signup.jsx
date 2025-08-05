@@ -43,7 +43,7 @@ export default function Signup() {
                 password: passRef.current.value,
                 type: 'Student'
             });
-            alert('تم إنشاء الحساب بنجاح!');
+            alert('تم إنشاء الحساب بنجاح! يمكنك تسجيل الدخول الآن.');
             navigate('/login');
         } catch (err) {
             alert(err.response?.data?.message || 'حدث خطأ');

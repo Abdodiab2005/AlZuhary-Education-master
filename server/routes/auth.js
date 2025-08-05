@@ -38,7 +38,8 @@ router.post('/signup', async (req, res) => {
       email: phoneNumber+"@alzuhary.com",
       parentPhoneNumber: type === 'Student' ? parentPhoneNumber : undefined,
       center,
-      grade
+      grade,
+      active: type === 'Student' ? true : false // تفعيل تلقائي للطلاب
     });
 
     await user.save();
@@ -69,16 +70,16 @@ router.post('/signin', async (req, res) => {
       return res.status(400).json({ message: 'بيانات غير صحيحة' });
     }
     
-    // التحقق من أن المستخدم مفعل
-    if (!user.active) {
-      return res.status(403).json({ message: 'الحساب غير مفعل، يرجى التواصل مع الإدارة' });
-    }
+    // إلغاء التحقق من التفعيل للطلاب - يمكنهم تسجيل الدخول مباشرة
+    // if (!user.active) {
+    //   return res.status(403).json({ message: 'الحساب غير مفعل، يرجى التواصل مع الإدارة' });
+    // }
     
     // Generate JWT
     const token = jwt.sign(
       { userId: user._id, type: user.type },
       process.env.JWT_SECRET,
-      { expiresIn: '1d' }
+      { expiresIn: '30d' } // زيادة مدة الصلاحية إلى 30 يوم
     );
     
     res.json({ 

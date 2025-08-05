@@ -11,6 +11,7 @@ import { IoMdAdd } from 'react-icons/io';
 import Delete_btn from '../components/Delete_btn';
 import axios from 'axios';
 import API_BASE_URL from '../apiConfig';
+import { checkTokenValidity, getAuthHeaders } from '../utils/tokenHandler';
 
 export default function Index() {
 
@@ -18,12 +19,13 @@ export default function Index() {
     const [playlist, setPlaylist] = useState(false);
     const [balance, setBalance] = useState(0);
     const [courses, setCourses] = useState([]);
-    const [newCourse, setNewCourse] = useState({ name: '', price: '', image: '', description: '' });
+    const [newCourse, setNewCourse] = useState({ name: '', price: '', image: '', description: '', grade: '' });
     const [imageFile, setImageFile] = useState(null);
     const userType = localStorage.getItem('userType');
+    const userGrade = localStorage.getItem('year_stage');
     const [purchasedCourses, setPurchasedCourses] = useState([]);
     const [editCourse, setEditCourse] = useState(null);
-    const [editForm, setEditForm] = useState({ name: '', price: '', image: null, description: '' });
+    const [editForm, setEditForm] = useState({ name: '', price: '', image: null, description: '', grade: '' });
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -34,22 +36,30 @@ export default function Index() {
     }, [navigate]);
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            axios.get(`${API_BASE_URL}/api/recharge/balance`, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
+        // التحقق من صلاحية الـ token أولاً
+        const isTokenValid = await checkTokenValidity();
+        if (!isTokenValid) {
+            navigate('/login');
+            return;
+        }
+
+        const headers = getAuthHeaders();
+        if (Object.keys(headers).length > 0) {
+            axios.get(`${API_BASE_URL}/api/recharge/balance`, { headers })
             .then(res => setBalance(res.data.credits || 0))
             .catch(() => setBalance(0));
-            axios.get(`${API_BASE_URL}/api/auth/me`, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
+            
+            axios.get(`${API_BASE_URL}/api/auth/me`, { headers })
             .then(res => setPurchasedCourses(res.data.purchasedCourses || []))
             .catch(() => setPurchasedCourses([]));
         }
-        axios.get(`${API_BASE_URL}/api/courses`, {
-            headers: { Authorization: `Bearer ${token}` }
-        })
+        
+        // جلب الكورسات حسب نوع المستخدم
+        const coursesEndpoint = (userType === 'Admin' || userType === 'Teacher') 
+            ? `${API_BASE_URL}/api/courses/all` 
+            : `${API_BASE_URL}/api/courses`;
+            
+        axios.get(coursesEndpoint, { headers })
             .then(res => {
                 // التأكد من أن كل كورس يحتوي على الدروس
                 const coursesWithLessons = res.data.map(course => ({
@@ -72,11 +82,12 @@ export default function Index() {
                 formData.append('image', imageFile);
             }
             formData.append('description', newCourse.description);
+            formData.append('grade', newCourse.grade);
             const res = await axios.post(`${API_BASE_URL}/api/courses`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` }
             });
             setCourses([...courses, { ...res.data, lessons: res.data.lessons || [] }]);
-            setNewCourse({ name: '', price: '', image: '', description: '' });
+            setNewCourse({ name: '', price: '', image: '', description: '', grade: '' });
             setImageFile(null);
             setPlaylist(false);
         } catch (err) {
@@ -110,7 +121,8 @@ export default function Index() {
             name: course.name || '',
             price: course.price || '',
             image: null,
-            description: course.description || ''
+            description: course.description || '',
+            grade: course.grade || ''
         });
     };
 
@@ -172,6 +184,12 @@ export default function Index() {
 
             {/* Cards Container */}
             <div className='h-fit flex flex-wrap justify-center items-start gap-15 md:mt-56 mt-50 relative'>
+                {/* عرض السنة الدراسية للطالب */}
+                {userType === 'Student' && userGrade && (
+                    <div className="w-full text-center bg-blue-600 text-white py-2 px-4 rounded-lg mb-4">
+                        <span className="text-lg font-bold">السنة الدراسية: {userGrade}</span>
+                    </div>
+                )}
 
                 {/* Popup confirmation massage */}
                 <div className={`w-[100vw] h-[100vh] fixed top-0 left-0 z-10 flex justify-center items-center ${alert ? `flex` : `hidden`} ${classes.msg}`}>
@@ -194,7 +212,12 @@ export default function Index() {
                 </div>
 
                 {courses.length === 0 && (
-                    <div className='w-full text-center text-gray-400 mt-10'>لا يوجد كورسات مضافة بعد</div>
+                    <div className='w-full text-center text-gray-400 mt-10'>
+                        {userType === 'Student' ? 
+                            'لا توجد كورسات متاحة لسنتك الدراسية حالياً' : 
+                            'لا يوجد كورسات مضافة بعد'
+                        }
+                    </div>
                 )}
                 {courses.map((course, idx) => {
                     const isPurchased = purchasedCourses.includes(course._id);
@@ -213,6 +236,9 @@ export default function Index() {
                         </div>
                         <div className='w-[85%] md:w-[90%] bg-white border-4 border-bluetheme-500 rounded-xl -translate-y-12 text-center p-2 flex flex-col justify-center items-center gap-2 shadow-lg'>
                             <h1 className='bg-bluetheme-500 text-white p-2 w-[90%] rounded-lg course text-xl head2'>{course.name}</h1>
+                            {course.grade && (
+                                <span className='bg-blue-600 text-white px-2 py-1 rounded-lg text-sm'>{course.grade}</span>
+                            )}
                             {course.description && (
                                 <p className='text-gray-700 text-sm mt-1 mb-2'>{course.description}</p>
                             )}
@@ -269,6 +295,19 @@ export default function Index() {
                             {/* وصف الكورس التعديل الجديد */}
                             <input type="text" placeholder='وصف الكورس' className='bg-white text-black w-[70%] text-xl text-center rounded-lg p-0.5' value={newCourse.description} onChange={e => setNewCourse({ ...newCourse, description: e.target.value })} />
                             <input type="number" placeholder='سعر الكورس' className='bg-white text-black rounded-md w-[50%] p-0.5 text-center' value={newCourse.price} onChange={e => setNewCourse({ ...newCourse, price: e.target.value })} />
+                            
+                            {/* حقل السنة الدراسية */}
+                            <select 
+                                className='bg-white text-black rounded-md w-[70%] p-0.5 text-center' 
+                                value={newCourse.grade} 
+                                onChange={e => setNewCourse({ ...newCourse, grade: e.target.value })}
+                                required
+                            >
+                                <option value="">اختر السنة الدراسية</option>
+                                <option value="أولى ثانوي">أولى ثانوي</option>
+                                <option value="تانية ثانوي">تانية ثانوي</option>
+                                <option value="تالتة ثانوي">تالتة ثانوي</option>
+                            </select>
                         </div>
 
                     </div>
@@ -302,6 +341,20 @@ export default function Index() {
                                 <input type="text" placeholder='عنوان الكورس' name="name" value={editForm.name} onChange={handleEditFormChange} className='bg-white text-bluetheme-500  w-[60%] text-xl text-center rounded-lg p-0.5' />
                                 <input type="text" placeholder='وصف الكورس' name="description" value={editForm.description} onChange={handleEditFormChange} className='bg-white text-black w-[70%] text-xl text-center rounded-lg p-0.5' />
                                 <input type="number" placeholder='سعر الكورس' name="price" value={editForm.price} onChange={handleEditFormChange} className='bg-white text-black rounded-md w-[50%] p-0.5 text-center' />
+                                
+                                {/* حقل السنة الدراسية للتعديل */}
+                                <select 
+                                    name="grade"
+                                    className='bg-white text-black rounded-md w-[70%] p-0.5 text-center' 
+                                    value={editForm.grade} 
+                                    onChange={handleEditFormChange}
+                                    required
+                                >
+                                    <option value="">اختر السنة الدراسية</option>
+                                    <option value="أولى ثانوي">أولى ثانوي</option>
+                                    <option value="تانية ثانوي">تانية ثانوي</option>
+                                    <option value="تالتة ثانوي">تالتة ثانوي</option>
+                                </select>
                             </div>
 
                         </div>
