@@ -54,9 +54,17 @@ router.get('/', authenticateToken, async (req, res) => {
     const user = await User.findById(req.user.userId);
     let courses;
     
-    // إذا كان المستخدم طالب، اعرض فقط الكورسات المناسبة لسنه الدراسية
+    // إذا كان المستخدم طالب، اعرض الكورسات المناسبة لسنه الدراسية
     if (user && user.type === 'Student' && user.grade) {
-      courses = await Course.find({ grade: user.grade });
+      // ابحث عن الكورسات المحددة للسنة الدراسية + الكورسات التي لا تحتوي على grade
+      courses = await Course.find({
+        $or: [
+          { grade: user.grade },
+          { grade: { $exists: false } },
+          { grade: null },
+          { grade: "" }
+        ]
+      });
     } else {
       // للمدرسين والأدمن، اعرض كل الكورسات
       courses = await Course.find();
@@ -73,6 +81,24 @@ router.get('/public', async (req, res) => {
   try {
     const courses = await Course.find();
     res.json(courses);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// جلب جميع الكورسات مع تفاصيلها (للأدمن)
+router.get('/debug', async (req, res) => {
+  try {
+    const courses = await Course.find();
+    res.json({
+      count: courses.length,
+      courses: courses.map(c => ({
+        id: c._id,
+        name: c.name,
+        grade: c.grade || 'غير محدد',
+        description: c.description
+      }))
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
@@ -290,6 +316,55 @@ router.get('/:id', async (req, res) => {
     const course = await Course.findById(req.params.id);
     if (!course) return res.status(404).json({ message: 'الكورس غير موجود' });
     res.json(course);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// تحديث سنة دراسية لكورس محدد
+router.patch('/:id/grade', async (req, res) => {
+  try {
+    const { grade } = req.body;
+    if (!grade || !['أولى ثانوي', 'تانية ثانوي', 'تالتة ثانوي'].includes(grade)) {
+      return res.status(400).json({ message: 'السنة الدراسية غير صحيحة' });
+    }
+    
+    const course = await Course.findByIdAndUpdate(
+      req.params.id, 
+      { grade }, 
+      { new: true }
+    );
+    
+    if (!course) return res.status(404).json({ message: 'الكورس غير موجود' });
+    res.json(course);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// تحديث كل الكورسات التي لا تحتوي على grade
+router.patch('/update-all-grades', async (req, res) => {
+  try {
+    const { grade } = req.body;
+    if (!grade || !['أولى ثانوي', 'تانية ثانوي', 'تالتة ثانوي'].includes(grade)) {
+      return res.status(400).json({ message: 'السنة الدراسية غير صحيحة' });
+    }
+    
+    const result = await Course.updateMany(
+      { 
+        $or: [
+          { grade: { $exists: false } },
+          { grade: null },
+          { grade: "" }
+        ]
+      },
+      { grade }
+    );
+    
+    res.json({ 
+      message: `تم تحديث ${result.modifiedCount} كورس`,
+      modifiedCount: result.modifiedCount 
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }

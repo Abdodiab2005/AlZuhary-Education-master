@@ -19,6 +19,7 @@ export default function Index() {
     const [playlist, setPlaylist] = useState(false);
     const [balance, setBalance] = useState(0);
     const [courses, setCourses] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [newCourse, setNewCourse] = useState({ name: '', price: '', image: '', description: '', grade: '' });
     const [imageFile, setImageFile] = useState(null);
     const userType = localStorage.getItem('userType');
@@ -56,7 +57,8 @@ export default function Index() {
             }
             
             // جلب الكورسات حسب نوع المستخدم
-            const coursesEndpoint = (userType === 'Admin' || userType === 'Teacher') 
+            const currentUserType = localStorage.getItem('userType');
+            const coursesEndpoint = (currentUserType === 'Admin' || currentUserType === 'Teacher') 
                 ? `${API_BASE_URL}/api/courses/all` 
                 : `${API_BASE_URL}/api/courses`;
                 
@@ -68,8 +70,13 @@ export default function Index() {
                         lessons: course.lessons || []
                     }));
                     setCourses(coursesWithLessons);
+                    setLoading(false);
                 })
-                .catch(() => setCourses([]));
+                .catch((error) => {
+                    console.error('Error fetching courses:', error);
+                    setCourses([]);
+                    setLoading(false);
+                });
         };
 
         initializeData();
@@ -215,12 +222,22 @@ export default function Index() {
                     </div>
                 </div>
 
-                {courses.length === 0 && (
+                {loading && (
+                    <div className='w-full text-center text-gray-400 mt-10'>
+                        جاري تحميل الكورسات...
+                    </div>
+                )}
+                {!loading && courses.length === 0 && (
                     <div className='w-full text-center text-gray-400 mt-10'>
                         {userType === 'Student' ? 
                             'لا توجد كورسات متاحة لسنتك الدراسية حالياً' : 
                             'لا يوجد كورسات مضافة بعد'
                         }
+                    </div>
+                )}
+                {!loading && courses.length > 0 && (
+                    <div className='w-full text-center text-green-600 mt-4 mb-2'>
+                        تم العثور على {courses.length} كورس
                     </div>
                 )}
                 {courses.map((course, idx) => {
