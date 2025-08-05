@@ -36,39 +36,43 @@ export default function Index() {
     }, [navigate]);
 
     useEffect(() => {
-        // التحقق من صلاحية الـ token أولاً
-        const isTokenValid = await checkTokenValidity();
-        if (!isTokenValid) {
-            navigate('/login');
-            return;
-        }
+        const initializeData = async () => {
+            // التحقق من صلاحية الـ token أولاً
+            const isTokenValid = await checkTokenValidity();
+            if (!isTokenValid) {
+                navigate('/login');
+                return;
+            }
 
-        const headers = getAuthHeaders();
-        if (Object.keys(headers).length > 0) {
-            axios.get(`${API_BASE_URL}/api/recharge/balance`, { headers })
-            .then(res => setBalance(res.data.credits || 0))
-            .catch(() => setBalance(0));
+            const headers = getAuthHeaders();
+            if (Object.keys(headers).length > 0) {
+                axios.get(`${API_BASE_URL}/api/recharge/balance`, { headers })
+                .then(res => setBalance(res.data.credits || 0))
+                .catch(() => setBalance(0));
+                
+                axios.get(`${API_BASE_URL}/api/auth/me`, { headers })
+                .then(res => setPurchasedCourses(res.data.purchasedCourses || []))
+                .catch(() => setPurchasedCourses([]));
+            }
             
-            axios.get(`${API_BASE_URL}/api/auth/me`, { headers })
-            .then(res => setPurchasedCourses(res.data.purchasedCourses || []))
-            .catch(() => setPurchasedCourses([]));
-        }
-        
-        // جلب الكورسات حسب نوع المستخدم
-        const coursesEndpoint = (userType === 'Admin' || userType === 'Teacher') 
-            ? `${API_BASE_URL}/api/courses/all` 
-            : `${API_BASE_URL}/api/courses`;
-            
-        axios.get(coursesEndpoint, { headers })
-            .then(res => {
-                // التأكد من أن كل كورس يحتوي على الدروس
-                const coursesWithLessons = res.data.map(course => ({
-                    ...course,
-                    lessons: course.lessons || []
-                }));
-                setCourses(coursesWithLessons);
-            })
-            .catch(() => setCourses([]));
+            // جلب الكورسات حسب نوع المستخدم
+            const coursesEndpoint = (userType === 'Admin' || userType === 'Teacher') 
+                ? `${API_BASE_URL}/api/courses/all` 
+                : `${API_BASE_URL}/api/courses`;
+                
+            axios.get(coursesEndpoint, { headers })
+                .then(res => {
+                    // التأكد من أن كل كورس يحتوي على الدروس
+                    const coursesWithLessons = res.data.map(course => ({
+                        ...course,
+                        lessons: course.lessons || []
+                    }));
+                    setCourses(coursesWithLessons);
+                })
+                .catch(() => setCourses([]));
+        };
+
+        initializeData();
     }, [navigate]);
 
     const handleAddCourse = async (e) => {
