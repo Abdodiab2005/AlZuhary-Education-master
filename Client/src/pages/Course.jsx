@@ -3,7 +3,7 @@ import Buy_single_lec from "../components/Buy_single_lec";
 import Header from "../components/Header";
 import Baught_single_lec from '../components/Baught_single_lec';
 import Bottom_nav from '../components/Bottom_nav';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import classes from '../css/single_lec.module.css'
 import { IoMdAdd } from 'react-icons/io';
 import { MdEdit } from 'react-icons/md';
@@ -197,7 +197,7 @@ export default function Course() {
     }, [courseId, lessons, watchedLessons, examScores]);
 
     // دالة موحدة لتحديث حالة الدروس
-    const updateLessonStatuses = async () => {
+    const updateLessonStatuses = useCallback(async () => {
         const token = localStorage.getItem('token');
         if (!token || !lessons.length) return;
         
@@ -219,7 +219,7 @@ export default function Course() {
             }
         }
         setLessonStatuses(statuses);
-    };
+    }, [courseId, lessons]);
 
     // تحديث lessonStatuses عند تغيير examScores
     useEffect(() => {
@@ -284,7 +284,7 @@ export default function Course() {
         }
     }, [location.pathname, lessons, courseId]);
 
-    const handleAddLesson = async (e) => {
+    const handleAddLesson = useCallback(async (e) => {
         e.preventDefault();
         try {
             const formData = new FormData();
@@ -317,16 +317,16 @@ export default function Course() {
             } catch (err) {
             }
 
-            setLessons([...lessons, res.data]);
+            setLessons(prev => [...prev, res.data]);
             setNewLesson({ title: '', price: '', videoUrl: '', assignmentUrl: '', viewLimit: 5, viewPrice: 10 });
             setImageFile(null);
             setLesson(false);
         } catch (err) {
             window.alert('حدث خطأ أثناء إضافة الدرس');
         }
-    };
+    }, [courseId, newLesson, imageFile]);
 
-    const handleBuyLesson = async (lesson) => {
+    const handleBuyLesson = useCallback(async (lesson) => {
         const token = localStorage.getItem('token');
         
         if (!token) {
@@ -388,9 +388,9 @@ export default function Course() {
                 window.alert('حدث خطأ أثناء شراء الدرس');
             }
         }
-    };
+    }, [courseId, navigate, updateLessonStatuses]);
 
-    const handleEditClick = (lesson) => {
+    const handleEditClick = useCallback((lesson) => {
         setEditLesson(lesson);
         setEditForm({
             title: lesson.title || '',
@@ -401,24 +401,24 @@ export default function Course() {
             viewLimit: parseInt(lesson.viewLimit) || 5,
             viewPrice: parseInt(lesson.viewPrice) || 10
         });
-    };
+    }, []);
 
-    const handleEditFormChange = (e) => {
+    const handleEditFormChange = useCallback((e) => {
         const { name, value, files } = e.target;
         if (name === 'image') {
-            setEditForm({ ...editForm, image: files[0] });
+            setEditForm(prev => ({ ...prev, image: files[0] }));
         } else if (name === 'viewLimit') {
-            setEditForm({ ...editForm, [name]: value === '' ? 5 : parseInt(value) || 5 });
+            setEditForm(prev => ({ ...prev, [name]: value === '' ? 5 : parseInt(value) || 5 }));
         } else if (name === 'viewPrice') {
-            setEditForm({ ...editForm, [name]: value === '' ? 10 : parseInt(value) || 10 });
+            setEditForm(prev => ({ ...prev, [name]: value === '' ? 10 : parseInt(value) || 10 }));
         } else if (name === 'price') {
-            setEditForm({ ...editForm, [name]: value === '' ? '' : parseInt(value) || 0 });
+            setEditForm(prev => ({ ...prev, [name]: value === '' ? '' : parseInt(value) || 0 }));
         } else {
-            setEditForm({ ...editForm, [name]: value });
+            setEditForm(prev => ({ ...prev, [name]: value }));
         }
-    };
+    }, []);
 
-    const handleEditSave = async () => {
+    const handleEditSave = useCallback(async () => {
         const token = localStorage.getItem('token');
         if (!editLesson || !editLesson._id) {
             window.alert('لم يتم تحديد درس للتعديل');
@@ -447,16 +447,16 @@ export default function Course() {
                 }
             });
 
-            setLessons(lessons.map(l => l._id === editLesson._id ? res.data : l));
+            setLessons(prev => prev.map(l => l._id === editLesson._id ? res.data : l));
             setEditLesson(null);
             setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10 });
         } catch (err) {
             console.error('Error editing lesson:', err);
             window.alert('حدث خطأ أثناء تعديل الدرس');
         }
-    };
+    }, [courseId, editLesson, editForm]);
 
-    const handleDeleteLesson = async (lessonId) => {
+    const handleDeleteLesson = useCallback(async (lessonId) => {
         const token = localStorage.getItem('token');
         if (!courseId) {
             window.alert('معرف الكورس غير موجود');
@@ -467,18 +467,18 @@ export default function Course() {
                 await axios.delete(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                setLessons(lessons.filter(l => l._id !== lessonId));
+                setLessons(prev => prev.filter(l => l._id !== lessonId));
             } catch (err) {
                 console.error('Error deleting lesson:', err);
                 window.alert('حدث خطأ أثناء حذف الدرس');
             }
         }
-    };
+    }, [courseId]);
 
 
 
     // دالة للتحقق من إمكانية الوصول للدرس
-    const canAccessLesson = async (lessonIndex) => {
+    const canAccessLesson = useCallback(async (lessonIndex) => {
         // الدرس الأول متاح دائماً
         if (lessonIndex === 0) return true;
         
@@ -495,9 +495,9 @@ export default function Course() {
         } catch (err) {
             return false;
         }
-    };
+    }, [courseId, lessons]);
 
-    function getRemainingViews(lessonId) {
+    const getRemainingViews = useCallback((lessonId) => {
         const lesson = lessons.find(l => l._id === lessonId);
         if (!lesson) return 0;
 
@@ -506,9 +506,9 @@ export default function Course() {
         const viewLimit = lesson.viewLimit || 5;
 
         return Math.max(0, viewLimit - currentViews);
-    }
+    }, [lessons, lessonViewCounts]);
 
-    function canTakeCurrentExam(lessonId) {
+    const canTakeCurrentExam = useCallback((lessonId) => {
         // يجب أن يشاهد الفيديو أولاً
         const watched = watchedLessons?.some(l => {
             if (!l) return false;
@@ -517,9 +517,9 @@ export default function Course() {
         });
         
         return watched;
-    }
+    }, [watchedLessons]);
 
-    const handleCurrentExam = async (lessonId) => {
+    const handleCurrentExam = useCallback(async (lessonId) => {
         try {
             const token = localStorage.getItem('token');
             
@@ -557,9 +557,9 @@ export default function Course() {
                 window.alert('حدث خطأ في جلب الامتحان');
             }
         }
-    };
+    }, [courseId, navigate]);
 
-    const handlePreviousExam = async (lessonId) => {
+    const handlePreviousExam = useCallback(async (lessonId) => {
         try {
             const token = localStorage.getItem('token');
             
@@ -599,10 +599,10 @@ export default function Course() {
                 window.alert('حدث خطأ في جلب الامتحان');
             }
         }
-    };
+    }, [courseId, navigate]);
 
     // تحديث البيانات من الخادم
-    const refreshData = async () => {
+    const refreshData = useCallback(async () => {
         const token = localStorage.getItem('token');
         if (token) {
             try {
@@ -636,7 +636,7 @@ export default function Course() {
             } catch (err) {
             }
         }
-    };
+    }, [updateLessonStatuses]);
 
     // تحديث البيانات عند تغيير lessonViewCounts أو forceUpdate
     useEffect(() => {
@@ -657,7 +657,7 @@ export default function Course() {
     }, [lessonViewCounts, forceUpdate]);
 
     // شراء مرات مشاهدة إضافية
-    const handleBuyViews = async (lessonId, numberOfViews) => {
+    const handleBuyViews = useCallback(async (lessonId, numberOfViews) => {
         const token = localStorage.getItem('token');
         try {
             const res = await axios.post(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}/buy-views`,
@@ -684,7 +684,7 @@ export default function Course() {
                 window.alert('حدث خطأ أثناء شراء مرات المشاهدة');
             }
         }
-    };
+    }, [courseId, refreshData]);
 
     return <>
         <div className='font-GraphicSchool h-[100hv] w-full  flex flex-col items-center'>
@@ -734,16 +734,8 @@ export default function Course() {
                         })
                         : null;
                     
-                    // منطق التفعيل المبسط
-                    const [canAccess, setCanAccess] = useState(false);
-                    
-                    useEffect(() => {
-                        const checkAccess = async () => {
-                            const access = await canAccessLesson(idx);
-                            setCanAccess(access);
-                        };
-                        checkAccess();
-                    }, [idx, examScores]);
+                                         // منطق التفعيل المبسط
+                     const canAccess = lessonStatuses[lesson._id]?.canAccessLesson || false;
                     
                     const lessonUnlocked = courseUnlocked || (lessonActivation && (lessonActivation.video || lessonActivation.assignment)) || canAccess;
                     
