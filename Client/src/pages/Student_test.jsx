@@ -39,12 +39,16 @@ export default function Student_test() {
         try {
             const token = localStorage.getItem('token');
             
-                    const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
+            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             
-            if (response.data && response.data.length > 0) {
-                setExam(response.data[0]);
+            // البحث عن امتحان current (حالي) أولاً
+            if (response.data && response.data.organized && response.data.organized.current) {
+                setExam(response.data.organized.current);
+            } else if (response.data && response.data.all && response.data.all.length > 0) {
+                // إذا لم يكن هناك امتحان current، خذ أول امتحان
+                setExam(response.data.all[0]);
             } else {
                 alert('لا يوجد امتحان لهذا الدرس');
                 navigate(-1);

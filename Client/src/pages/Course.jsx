@@ -527,65 +527,23 @@ export default function Course() {
                 return;
             }
             
-            console.log(`محاولة جلب امتحان الدرس الحالي: ${lessonId}`);
-            
-            // التحقق من إمكانية أخذ امتحان الدرس الحالي
-            const canTakeResponse = await axios.get(`${API_BASE_URL}/api/exams/can-take-current/${courseId}/${lessonId}`, {
+            // جلب الامتحانات للدرس
+            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             
-            console.log('استجابة التحقق من إمكانية أخذ الامتحان:', canTakeResponse.data);
-            
-            if (!canTakeResponse.data.canTake) {
-                const reason = canTakeResponse.data.reason;
-                let message = 'لا يمكن أخذ الامتحان حالياً';
-                
-                if (reason === 'Video not watched') {
-                    message = 'يجب مشاهدة الفيديو أولاً';
-                } else if (reason === 'No exam available') {
-                    message = 'لا يوجد امتحان لهذا الدرس';
-                }
-                
-                window.alert(message);
-                return;
-            }
-
-            console.log('جاري جلب الامتحان...');
-            
-            // جلب الامتحان
-            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}/type/current`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            
-            console.log('استجابة جلب الامتحان:', response.data);
-            
-            if (response.data && response.data.length > 0) {
-                console.log('تم العثور على الامتحان، جاري الانتقال...');
-                navigate(`/exam/${lessonId}`, { 
-                    state: { 
-                        exam: response.data[0],
-                        isCurrentLesson: true 
-                    } 
+            if (response.data && response.data.organized && response.data.organized.current) {
+                navigate(`/exam/${lessonId}`, {
+                    state: { exam: response.data.organized.current }
                 });
             } else {
-                window.alert('لا يوجد امتحان لهذا الدرس');
+                window.alert('لا يوجد امتحان حالي لهذا الدرس');
             }
         } catch (error) {
             console.error('خطأ في جلب الامتحان:', error);
-            
-            let errorMessage = 'حدث خطأ في جلب الامتحان';
-            
-            if (error.response?.status === 401) {
-                errorMessage = 'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مرة أخرى';
-            } else if (error.response?.status === 404) {
-                errorMessage = 'لم يتم العثور على الامتحان';
-            } else if (error.response?.data?.message) {
-                errorMessage = error.response.data.message;
-            }
-            
-            window.alert(errorMessage);
+            window.alert('حدث خطأ في جلب الامتحان');
         }
-    }, [courseId, navigate]);
+    }, [navigate]);
 
     const handlePreviousExam = useCallback(async (lessonId) => {
         try {
@@ -595,69 +553,32 @@ export default function Course() {
                 return;
             }
             
-            console.log(`محاولة جلب امتحان الدرس السابق: ${lessonId}`);
-            
-            // التحقق من إمكانية أخذ امتحان الدرس السابق
-            const canTakeResponse = await axios.get(`${API_BASE_URL}/api/exams/can-take-previous/${courseId}/${lessonId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            
-            console.log('استجابة التحقق من إمكانية أخذ الامتحان السابق:', canTakeResponse.data);
-            
-            if (!canTakeResponse.data.canTake) {
-                const reason = canTakeResponse.data.reason;
-                let message = 'لا يمكن أخذ الامتحان حالياً';
-                
-                if (reason === 'No previous lesson') {
-                    message = 'لا يوجد درس سابق';
-                } else if (reason === 'Previous exam not passed') {
-                    message = 'يجب نجاح امتحان الدرس السابق أولاً';
-                } else if (reason === 'Previous lesson not activated') {
-                    message = 'لم يتم تفعيل الدرس السابق';
-                } else if (reason === 'No exam available for previous lesson') {
-                    message = 'لا يوجد امتحان للدرس السابق';
-                }
-                
-                window.alert(message);
+            // البحث عن الدرس السابق
+            const currentLessonIndex = lessons.findIndex(l => l._id === lessonId);
+            if (currentLessonIndex <= 0) {
+                window.alert('لا يوجد درس سابق');
                 return;
             }
-
-            console.log('جاري جلب امتحان الدرس السابق...');
             
-            // جلب امتحان الدرس السابق
-            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${canTakeResponse.data.previousLessonId}/type/previous`, {
+            const previousLesson = lessons[currentLessonIndex - 1];
+            
+            // جلب الامتحانات للدرس السابق
+            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${previousLesson._id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             
-            console.log('استجابة جلب امتحان الدرس السابق:', response.data);
-            
-            if (response.data && response.data.length > 0) {
-                console.log('تم العثور على امتحان الدرس السابق، جاري الانتقال...');
-                navigate(`/exam/${canTakeResponse.data.previousLessonId}`, { 
-                    state: { 
-                        exam: response.data[0],
-                        isPreviousLesson: true 
-                    } 
+            if (response.data && response.data.organized && response.data.organized.previous) {
+                navigate(`/exam/${previousLesson._id}`, {
+                    state: { exam: response.data.organized.previous }
                 });
             } else {
-                window.alert('لا يوجد امتحان للدرس السابق');
+                window.alert('لا يوجد امتحان سابق للدرس السابق');
             }
         } catch (error) {
             console.error('خطأ في جلب امتحان الدرس السابق:', error);
-            
-            let errorMessage = 'حدث خطأ في جلب الامتحان';
-            
-            if (error.response?.status === 401) {
-                errorMessage = 'انتهت صلاحية الجلسة. يرجى تسجيل الدخول مرة أخرى';
-            } else if (error.response?.status === 404) {
-                errorMessage = 'لم يتم العثور على الامتحان';
-            } else if (error.response?.data?.message) {
-                errorMessage = error.response.data.message;
-            }
-            
-            window.alert(errorMessage);
+            window.alert('حدث خطأ في جلب الامتحان');
         }
-    }, [courseId, navigate]);
+    }, [lessons, navigate]);
 
     // تحديث البيانات من الخادم
     const refreshData = useCallback(async () => {
@@ -750,16 +671,12 @@ export default function Course() {
             const token = localStorage.getItem('token');
             if (!token) return;
             
-            console.log('اختبار وجود الامتحانات...');
-            
             // اختبار إجمالي الامتحانات
             const totalExamsResponse = await axios.get(`${API_BASE_URL}/api/exams/test-exams`);
-            console.log('إجمالي الامتحانات:', totalExamsResponse.data);
             
             // اختبار امتحانات كل درس
             for (const lesson of lessons) {
                 const lessonExamsResponse = await axios.get(`${API_BASE_URL}/api/exams/test-lesson-exams/${lesson._id}`);
-                console.log(`امتحانات الدرس ${lesson.title}:`, lessonExamsResponse.data);
             }
         } catch (error) {
             console.error('خطأ في اختبار الامتحانات:', error);
@@ -771,7 +688,6 @@ export default function Course() {
         if (userType === 'Admin' || userType === 'Teacher') {
             // إضافة زر اختبار في console
             window.testExams = testExams;
-            console.log('يمكنك استخدام window.testExams() لاختبار الامتحانات');
         }
     }, [userType, testExams]);
 

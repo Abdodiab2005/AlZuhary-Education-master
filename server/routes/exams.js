@@ -1,31 +1,11 @@
 const express = require('express');
 const Exam = require('../models/Exam');
-const Question = require('../models/Question');
 const Course = require('../models/Course');
 const User = require('../models/User');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 
 const router = express.Router();
-
-// Error handling middleware for exams routes
-router.use((err, req, res, next) => {
-  console.error('Exams route error:', err);
-  res.status(500).json({ 
-    message: 'خطأ في الاختبارات', 
-    error: process.env.NODE_ENV === 'development' ? err.message : 'خطأ داخلي'
-  });
-});
-
-// جلب كل الامتحانات
-router.get('/', async (req, res) => {
-  try {
-    const exams = await Exam.find().populate('questions');
-    res.json(exams);
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
 
 // Middleware للتحقق من token
 const authenticateToken = (req, res, next) => {
@@ -39,401 +19,231 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// إضافة امتحان جديد لدرس معين
-router.post('/', async (req, res) => {
+// إنشاء/تحديث امتحان
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const { name, courseId, lessonId, examType, questions } = req.body;
-    // إنشاء الأسئلة أولاً
-    const createdQuestions = await Question.insertMany(questions);
-    const questionIds = createdQuestions.map(q => q._id);
-    const exam = new Exam({ 
-      name, 
-      courseId, 
-      lessonId, 
-      examType: examType || 'current', // استخدام examType أو 'current' كقيمة افتراضية
-      questions: questionIds 
-    });
-    await exam.save();
-    res.status(201).json(exam);
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-// جلب كل امتحانات درس معين
-router.get('/lesson/:lessonId', authenticateToken, async (req, res) => {
-  try {
-    const exams = await Exam.find({ lessonId: req.params.lessonId }).populate('questions');
-    res.json(exams);
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-// جلب امتحانات درس معين حسب النوع (حالي/سابق)
-router.get('/lesson/:lessonId/type/:examType', authenticateToken, async (req, res) => {
-  try {
-    const { lessonId, examType } = req.params;
     
-    // التحقق من صحة نوع الامتحان
-    if (!['current', 'previous'].includes(examType)) {
-      return res.status(400).json({ message: 'نوع الامتحان غير صحيح' });
+    // التحقق من البيانات
+    if (!name || !courseId || !lessonId || !examType || !questions || questions.length === 0) {
+      return res.status(400).json({ message: 'جميع البيانات مطلوبة' });
     }
     
-    const exams = await Exam.find({ 
-      lessonId, 
-      examType: examType // 'current' أو 'previous'
-    }).populate('questions');
+    // التحقق من نوع الامتحان
+    if (!['current', 'previous'].includes(examType)) {
+      return res.status(400).json({ message: 'نوع الامتحان يجب أن يكون current أو previous' });
+    }
     
-    console.log(`Found ${exams.length} exams for lesson ${lessonId} with type ${examType}`);
+    // البحث عن امتحان موجود للدرس ونفس النوع
+    const existingExam = await Exam.findOne({ lessonId, examType });
     
-    if (exams.length === 0) {
-      return res.status(404).json({ 
-        message: `لا يوجد امتحان من نوع ${examType === 'current' ? 'الحالي' : 'السابق'} لهذا الدرس`,
-        lessonId,
-        examType
+    if (existingExam) {
+      // منع إنشاء امتحان جديد إذا كان موجود
+      return res.status(400).json({ 
+        message: `يوجد امتحان ${examType === 'current' ? 'حالي' : 'سابق'} لهذا الدرس بالفعل. استخدم زر التحديث لتعديله.`,
+        existingExam: existingExam,
+        examId: existingExam._id
       });
     }
     
-    res.json(exams);
+    // إنشاء امتحان جديد
+    const newExam = new Exam({
+      name,
+      courseId,
+      lessonId,
+      examType,
+      questions
+    });
+    
+    await newExam.save();
+    
+    res.status(201).json({ 
+      message: 'تم إنشاء امتحان جديد بنجاح', 
+      exam: newExam, 
+      updated: false,
+      examId: newExam._id
+    });
+    
   } catch (err) {
-    console.error('Error fetching exam:', err);
-    res.status(500).json({ message: 'Server error', error: err.message });
+    console.error('Error creating/updating exam:', err);
+    res.status(500).json({ 
+      message: 'خطأ في إنشاء/تحديث الامتحان', 
+      error: err.message 
+    });
   }
 });
 
-// جلب كل امتحانات كورس معين
-router.get('/course/:courseId', async (req, res) => {
+// جلب امتحانات درس معين
+router.get('/lesson/:lessonId', authenticateToken, async (req, res) => {
   try {
-    const exams = await Exam.find({ courseId: req.params.courseId }).populate('questions');
-    res.json(exams);
+    const { lessonId } = req.params;
+    
+    const exams = await Exam.find({ lessonId }).sort({ createdAt: -1 });
+    
+    const organizedExams = {
+      current: exams.find(exam => exam.examType === 'current'),
+      previous: exams.find(exam => exam.examType === 'previous')
+    };
+    
+    res.json({
+      message: `تم العثور على ${exams.length} امتحان للدرس`,
+      total: exams.length,
+      organized: organizedExams,
+      all: exams
+    });
   } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-// إضافة سؤال لامتحان معين
-router.post('/:examId/question', async (req, res) => {
-  try {
-    const { text, image, answers, correctAnswerIndex } = req.body;
-    const question = new Question({ text, image, answers, correctAnswerIndex });
-    await question.save();
-    await Exam.findByIdAndUpdate(req.params.examId, { $push: { questions: question._id } });
-    res.status(201).json(question);
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-// جلب امتحان الدرس السابق (حسب ترتيب الدروس في الكورس)
-router.get('/previous/:courseId/:lessonId', async (req, res) => {
-  try {
-    const { courseId, lessonId } = req.params;
-    const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ message: 'Course not found' });
-    const lessons = course.lessons;
-    const idx = lessons.findIndex(l => l._id.toString() === lessonId);
-    if (idx <= 0) return res.status(404).json({ message: 'No previous lesson' });
-    const previousLessonId = lessons[idx - 1]._id;
-    const exam = await Exam.findOne({ lessonId: previousLessonId }).populate('questions');
-    if (!exam) return res.status(404).json({ message: 'No exam for previous lesson' });
-    res.json(exam);
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
+    console.error('Error fetching exams for lesson:', err);
+    res.status(500).json({ 
+      message: 'خطأ في جلب الامتحانات', 
+      error: err.message 
+    });
   }
 });
 
 // تصحيح الامتحان وتسجيل الدرجة
 router.post('/:examId/submit', authenticateToken, async (req, res) => {
   try {
-    const { answers } = req.body; // answers: [index لكل سؤال]
-    const exam = await Exam.findById(req.params.examId).populate('questions');
+    const { answers } = req.body;
+    const exam = await Exam.findById(req.params.examId);
+    
     if (!exam) return res.status(404).json({ message: 'Exam not found' });
-    let score = 0;
-    exam.questions.forEach((q, idx) => {
-      if (answers[idx] === q.correctAnswerIndex) score++;
-    });
-    const total = exam.questions.length;
-    const passed = (score / total) >= 0.5;
-    // سجل الدرجة للمستخدم
+    
+    // حساب النتيجة
+    const result = exam.calculateScore(answers);
+    const passed = result.percentage >= exam.passingScore;
+    
+    // تسجيل الدرجة للمستخدم
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    // لا تسجل إلا إذا لم يكن مسجل من قبل لهذا الامتحان
+    
+    // التحقق من أن المستخدم لم يسبق له أخذ هذا الامتحان
     const already = user.examScores.find(e => e.examId.toString() === exam._id.toString());
-    if (!already) {
-      user.examScores.push({
-        examId: exam._id,
-        lessonId: exam.lessonId,
-        score,
-        total,
-        passed
+    if (already) {
+      return res.status(400).json({ 
+        message: 'لقد أخذت هذا الامتحان من قبل',
+        previousScore: {
+          score: already.score,
+          total: already.total,
+          percentage: Math.round((already.score / already.total) * 100),
+          passed: already.passed
+        }
       });
-      await user.save();
     }
-    res.json({ score, total, passed });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-// التحقق من إمكانية أخذ امتحان الدرس الحالي
-router.get('/can-take-current/:courseId/:lessonId', authenticateToken, async (req, res) => {
-  try {
-    const { courseId, lessonId } = req.params;
-    const user = await User.findById(req.user.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // التحقق من تفعيل الدرس
-    const courseUnlocked = user.purchasedCourses.includes(courseId);
-    const lessonActivation = user.purchasedLessons.find(l => 
-      l.lessonId && l.lessonId.toString() === lessonId
-    );
     
-    // التحقق من أن المستخدم شاهد الفيديو أولاً
-    const watched = user.watchedLessons.some(l => 
-      l.lessonId && l.lessonId.toString() === lessonId
-    );
-
-    if (!watched) {
-      return res.json({ canTake: false, reason: 'Video not watched' });
-    }
-
-    // التحقق من وجود امتحان للدرس
-    const exam = await Exam.findOne({ lessonId, examType: 'current' });
-    if (!exam) {
-      return res.json({ canTake: false, reason: 'No exam available' });
-    }
-
-    res.json({ canTake: true, examId: exam._id });
-  } catch (err) {
-    console.error('Error in can-take-current:', err);
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-// التحقق من إمكانية أخذ امتحان الدرس السابق
-router.get('/can-take-previous/:courseId/:lessonId', authenticateToken, async (req, res) => {
-  try {
-    const { courseId, lessonId } = req.params;
-    const user = await User.findById(req.user.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // جلب الكورس للتحقق من ترتيب الدروس
-    const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ message: 'Course not found' });
-
-    const lessons = course.lessons;
-    const currentLessonIndex = lessons.findIndex(l => l._id.toString() === lessonId);
-    
-    // إذا كان الدرس الأول، لا يمكن أخذ امتحان سابق
-    if (currentLessonIndex <= 0) {
-      return res.json({ canTake: false, reason: 'No previous lesson' });
-    }
-
-    const previousLessonId = lessons[currentLessonIndex - 1]._id;
-
-    // التحقق من وجود امتحان للدرس السابق
-    const exam = await Exam.findOne({ lessonId: previousLessonId });
-    if (!exam) {
-      return res.json({ canTake: false, reason: 'No exam available for previous lesson' });
-    }
-
-    // التحقق من تفعيل الدرس السابق
-    const courseUnlocked = user.purchasedCourses.includes(courseId);
-    const previousLessonActivation = user.purchasedLessons.find(l => 
-      l.lessonId && l.lessonId.toString() === previousLessonId.toString()
-    );
-
-    // إذا كان الكورس مفعل أو تم تفعيل الدرس السابق، يمكن أخذ الامتحان
-    if (courseUnlocked || previousLessonActivation) {
-      return res.json({ canTake: true, previousLessonId });
-    }
-
-    // إذا لم يكن الكورس مفعل ولم يتم تفعيل الدرس السابق، لا يمكن أخذ الامتحان
-    return res.json({ canTake: false, reason: 'Previous lesson not activated' });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-// التحقق من إمكانية الوصول للدرس بناءً على نجاح امتحان الدرس السابق
-router.get('/can-access-lesson/:courseId/:lessonId', authenticateToken, async (req, res) => {
-  try {
-    const { courseId, lessonId } = req.params;
-    const user = await User.findById(req.user.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ message: 'Course not found' });
-
-    const lessons = course.lessons;
-    const currentLessonIndex = lessons.findIndex(l => l._id.toString() === lessonId);
-    
-    // الدرس الأول متاح دائماً
-    if (currentLessonIndex === 0) {
-      return res.json({ canAccess: true, reason: 'First lesson' });
-    }
-
-    // التحقق من نجاح امتحان الدرس السابق
-    const previousLessonId = lessons[currentLessonIndex - 1]._id;
-    const previousExamScore = user.examScores.find(score => 
-      score.lessonId && score.lessonId.toString() === previousLessonId.toString()
-    );
-
-    // إذا لم يكن هناك امتحان للدرس السابق، يمكن الوصول
-    if (!previousExamScore) {
-      return res.json({ canAccess: true, reason: 'No previous exam' });
-    }
-
-    // إذا نجح في امتحان الدرس السابق (50%+)، يمكن الوصول
-    if (previousExamScore.passed) {
-      return res.json({ canAccess: true, reason: 'Previous exam passed' });
-    }
-
-    // إذا لم ينجح في امتحان الدرس السابق، لا يمكن الوصول
-    return res.json({ 
-      canAccess: false, 
-      reason: 'Previous exam not passed',
-      previousExamScore: {
-        score: previousExamScore.score,
-        total: previousExamScore.total,
-        percentage: Math.round((previousExamScore.score / previousExamScore.total) * 100)
-      }
+    // تسجيل النتيجة الجديدة
+    user.examScores.push({
+      examId: exam._id,
+      lessonId: exam.lessonId,
+      score: result.score,
+      total: result.totalPossible,
+      passed
     });
-
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-// جلب حالة الامتحانات للمستخدم في درس معين
-router.get('/lesson-status/:courseId/:lessonId', authenticateToken, async (req, res) => {
-  try {
-    const { courseId, lessonId } = req.params;
-    const user = await User.findById(req.user.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // جلب الكورس للتحقق من ترتيب الدروس
-    const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ message: 'Course not found' });
-
-    const lessons = course.lessons;
-    const currentLessonIndex = lessons.findIndex(l => l._id.toString() === lessonId);
+    await user.save();
     
-    // التحقق من إمكانية الوصول للدرس
-    let canAccessLesson = true;
-    
-    // التحقق من تفعيل الدرس الحالي
-    const courseUnlocked = user.purchasedCourses.includes(courseId);
-    const lessonActivation = user.purchasedLessons.find(l => {
-      if (!l.lessonId) return false;
-      return l.lessonId.toString() === lessonId;
-    });
-
-    // يمكن الوصول للدرس إذا كان الكورس مفعل أو تم تفعيل الدرس
-    canAccessLesson = courseUnlocked || !!lessonActivation;
-
-    // التحقق من إمكانية أخذ امتحان الدرس الحالي
-    let canTakeCurrentExam = false;
-    // يجب أن يشاهد الفيديو أولاً
-    const watchedForExam = user.watchedLessons.some(l => 
-      l.lessonId && l.lessonId.toString() === lessonId
-    );
-    canTakeCurrentExam = watchedForExam;
-
-    // التحقق من إمكانية أخذ امتحان الدرس السابق
-    let canTakePreviousExam = false;
-    if (currentLessonIndex > 0) {
-      const previousLessonId = lessons[currentLessonIndex - 1]._id;
-      const previousLessonActivation = user.purchasedLessons.find(l => {
-        if (!l.lessonId) return false;
-        return l.lessonId.toString() === previousLessonId.toString();
-      });
-      
-      // إذا كان الكورس مفعل أو تم تفعيل الدرس السابق
-      if (courseUnlocked || previousLessonActivation) {
-        // التحقق من وجود امتحان للدرس السابق
-        const exam = await Exam.findOne({ lessonId: previousLessonId });
-        canTakePreviousExam = !!exam; // متاح إذا كان هناك امتحان للدرس السابق
-      }
-    }
-
-    // التحقق من عدد مرات المشاهدة المتبقية
-    const lessonViewCount = user.lessonViewCounts.find(v => 
-      v.lessonId && v.lessonId.toString() === lessonId
-    );
-    const currentViews = lessonViewCount ? lessonViewCount.viewCount : 0;
-    
-    // جلب معلومات الدرس
-    const lesson = lessons[currentLessonIndex];
-    const viewLimit = lesson ? (lesson.viewLimit || 5) : 5;
-    const remainingViews = Math.max(0, viewLimit - currentViews);
-
-    // التحقق من أن المستخدم شاهد الدرس
-    const watched = user.watchedLessons.some(l => 
-      l.lessonId && l.lessonId.toString() === lessonId
-    );
-
-    res.json({
-      canAccessLesson,
-      canTakeCurrentExam,
-      canTakePreviousExam,
-      isFirstLesson: currentLessonIndex === 0,
-      remainingViews,
-      watched,
-      courseUnlocked,
-      lessonActivated: !!lessonActivation
+    res.json({ 
+      score: result.score, 
+      total: result.totalPossible, 
+      percentage: result.percentage,
+      passed 
     });
   } catch (err) {
+    console.error('Error submitting exam:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
-// مسار لاختبار وجود الامتحانات
-router.get('/test-exams', async (req, res) => {
-  try {
-    const exams = await Exam.find().populate('questions');
-    const examCount = exams.length;
-    
-    console.log(`Total exams in database: ${examCount}`);
-    
-    res.json({
-      totalExams: examCount,
-      exams: exams.map(exam => ({
-        id: exam._id,
-        name: exam.name,
-        courseId: exam.courseId,
-        lessonId: exam.lessonId,
-        examType: exam.examType,
-        questionCount: exam.questions.length
-      }))
-    });
-  } catch (err) {
-    console.error('Error testing exams:', err);
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
+// تحديث امتحان
+router.put('/:examId', authenticateToken, async (req, res) => {
+    try {
+        const { examId } = req.params;
+        const { name, courseId, lessonId, examType, questions } = req.body;
+        
+        // التحقق من البيانات
+        if (!name || !courseId || !lessonId || !examType || !questions || questions.length === 0) {
+            return res.status(400).json({ message: 'جميع البيانات مطلوبة' });
+        }
+        
+        // التحقق من نوع الامتحان
+        if (!['current', 'previous'].includes(examType)) {
+            return res.status(400).json({ message: 'نوع الامتحان يجب أن يكون current أو previous' });
+        }
+        
+        // البحث عن الامتحان
+        const exam = await Exam.findById(examId);
+        if (!exam) {
+            return res.status(404).json({ message: 'الامتحان غير موجود' });
+        }
+        
+        // التحقق من أن المستخدم هو Admin أو Teacher
+        const user = await User.findById(req.user.userId);
+        if (!user || (user.userType !== 'Admin' && user.userType !== 'Teacher')) {
+            return res.status(403).json({ message: 'غير مصرح لك بتحديث الامتحانات' });
+        }
+        
+        // التحقق من عدم وجود امتحان آخر بنفس النوع لنفس الدرس
+        const existingExam = await Exam.findOne({ 
+            lessonId, 
+            examType, 
+            _id: { $ne: examId } 
+        });
+        
+        if (existingExam) {
+            return res.status(400).json({ 
+                message: `يوجد امتحان ${examType === 'current' ? 'حالي' : 'سابق'} آخر لهذا الدرس` 
+            });
+        }
+        
+        // تحديث الامتحان
+        const updatedExam = await Exam.findByIdAndUpdate(
+            examId,
+            { name, courseId, lessonId, examType, questions },
+            { new: true, runValidators: true }
+        );
+        
+        res.json({
+            message: 'تم تحديث الامتحان بنجاح',
+            exam: updatedExam
+        });
+        
+    } catch (err) {
+        console.error('Error updating exam:', err);
+        res.status(500).json({
+            message: 'خطأ في تحديث الامتحان',
+            error: err.message
+        });
+    }
 });
 
-// مسار لاختبار امتحانات درس معين
-router.get('/test-lesson-exams/:lessonId', async (req, res) => {
-  try {
-    const { lessonId } = req.params;
-    
-    const currentExams = await Exam.find({ lessonId, examType: 'current' });
-    const previousExams = await Exam.find({ lessonId, examType: 'previous' });
-    
-    console.log(`Lesson ${lessonId}: ${currentExams.length} current exams, ${previousExams.length} previous exams`);
-    
-    res.json({
-      lessonId,
-      currentExams: currentExams.length,
-      previousExams: previousExams.length,
-      totalExams: currentExams.length + previousExams.length
-    });
-  } catch (err) {
-    console.error('Error testing lesson exams:', err);
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
+// حذف امتحان
+router.delete('/:examId', authenticateToken, async (req, res) => {
+    try {
+        const { examId } = req.params;
+        
+        const exam = await Exam.findById(examId);
+        if (!exam) {
+            return res.status(404).json({ message: 'الامتحان غير موجود' });
+        }
+        
+        // التحقق من أن المستخدم هو Admin أو Teacher
+        const user = await User.findById(req.user.userId);
+        if (!user || (user.userType !== 'Admin' && user.userType !== 'Teacher')) {
+            return res.status(403).json({ message: 'غير مصرح لك بحذف الامتحانات' });
+        }
+        
+        await Exam.findByIdAndDelete(examId);
+        
+        res.json({ 
+            message: 'تم حذف الامتحان بنجاح',
+            deletedExamId: examId
+        });
+        
+    } catch (err) {
+        console.error('Error deleting exam:', err);
+        res.status(500).json({ 
+            message: 'خطأ في حذف الامتحان', 
+            error: err.message 
+        });
+    }
 });
 
 module.exports = router; 

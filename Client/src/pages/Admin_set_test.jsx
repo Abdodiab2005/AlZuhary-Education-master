@@ -14,6 +14,9 @@ export default function Admin_set_test() {
     const [examType, setExamType] = useState('current'); // 'current' أو 'previous'
     const [questions, setQuestions] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [existingExams, setExistingExams] = useState({ current: null, previous: null });
+    const [currentExamId, setCurrentExamId] = useState(null);
+
 
     useEffect(() => {
         // فحص صلاحية التوكن عند تحميل الصفحة
@@ -63,34 +66,46 @@ export default function Admin_set_test() {
             const course = courses.find(c => c._id === selectedCourse);
             setLessons(course ? course.lessons : []);
             setSelectedLesson('');
+            // لا نعيد تعيين examType هنا لتجنب التحديث المستمر
         } else {
             setLessons([]);
             setSelectedLesson('');
-            setExamType('current'); // إعادة تعيين نوع الامتحان
         }
     }, [selectedCourse, courses]);
 
     useEffect(() => {
-        // عند تغيير الكورس أو الدرس، جلب الامتحان الحالي (إن وجد)
+        // عند تغيير الكورس أو الدرس، جلب الامتحانات الموجودة
         if (selectedCourse && selectedLesson && !isLoading) {
             axios.get(`${API_BASE_URL}/api/exams/lesson/${selectedLesson}`, {
                 headers: getAuthHeaders()
             })
                 .then(res => {
-                    if (Array.isArray(res.data) && res.data.length > 0) {
-                        // إذا كان هناك امتحان، عبئ الأسئلة
-                        const exam = res.data[0];
-                        setExamName(exam.name || '');
-                        setExamType(exam.examType || 'current'); // تعيين نوع الامتحان
-                        setQuestions((exam.questions || []).map(q => ({
-                            text: q.text,
-                            image: q.image,
-                            answers: (q.answers || []).map(a => a.text),
-                            correctAnswerIndex: q.correctAnswerIndex
-                        })));
+                    if (res.data.organized) {
+                        setExistingExams({
+                            current: res.data.organized.current,
+                            previous: res.data.organized.previous
+                        });
+                        
+                        // إذا كان هناك امتحان من النوع المختار، عبئ البيانات
+                        const selectedExam = res.data.organized[examType];
+                        if (selectedExam) {
+                            setExamName(selectedExam.name || '');
+                            setCurrentExamId(selectedExam._id);
+                            setQuestions((selectedExam.questions || []).map(q => ({
+                                text: q.text,
+                                image: q.image,
+                                answers: (q.answers || []).map(a => a.text),
+                                correctAnswerIndex: q.correctAnswerIndex
+                            })));
+                        } else {
+                            setExamName('');
+                            setCurrentExamId(null);
+                            setQuestions([]);
+                        }
                     } else {
+                        setExistingExams({ current: null, previous: null });
                         setExamName('');
-                        setExamType('current'); // إعادة تعيين للنوع الافتراضي
+                        setCurrentExamId(null);
                         setQuestions([]);
                     }
                 })
@@ -99,16 +114,68 @@ export default function Admin_set_test() {
                         alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
                         window.location.href = '/login';
                     } else {
+                        setExistingExams({ current: null, previous: null });
                         setExamName('');
+                        setCurrentExamId(null);
                         setQuestions([]);
                     }
                 });
-        } else {
+                } else {
+            setExistingExams({ current: null, previous: null });
             setQuestions([]);
             setExamName('');
-            setExamType('current'); // إعادة تعيين نوع الامتحان
+            setCurrentExamId(null);
         }
-    }, [selectedCourse, selectedLesson]);
+    }, [selectedCourse, selectedLesson, examType]);
+    
+    // عند تغيير نوع الامتحان، عبئ البيانات المناسبة
+    useEffect(() => {
+        if (existingExams[examType]) {
+            const selectedExam = existingExams[examType];
+            setExamName(selectedExam.name || '');
+            setCurrentExamId(selectedExam._id);
+            setQuestions((selectedExam.questions || []).map(q => ({
+                text: q.text,
+                image: q.image,
+                answers: (q.answers || []).map(a => a.text),
+                correctAnswerIndex: q.correctAnswerIndex
+            })));
+        } else {
+            setExamName('');
+            setCurrentExamId(null);
+            setQuestions([]);
+        }
+    }, [examType, existingExams]);
+    
+    // دالة إعادة تحميل بيانات الامتحان
+    function reloadExamData() {
+        if (selectedLesson) {
+            axios.get(`${API_BASE_URL}/api/exams/lesson/${selectedLesson}`, {
+                headers: getAuthHeaders()
+            })
+            .then(res => {
+                console.log('Reload exam response:', res.data);
+                if (res.data.all && res.data.all.length > 0) {
+                    // البحث عن الامتحان بنفس النوع
+                    const exam = res.data.all.find(exam => exam.examType === examType);
+                    console.log('Found exam with matching type:', exam);
+                    if (exam) {
+                        setExamName(exam.name || '');
+                        setExamType(exam.examType || '');
+                        setQuestions((exam.questions || []).map(q => ({
+                            text: q.text,
+                            image: q.image,
+                            answers: (q.answers || []).map(a => a.text),
+                            correctAnswerIndex: q.correctAnswerIndex
+                        })));
+                    }
+                }
+            })
+            .catch(err => {
+                console.error('Error reloading exam data:', err);
+            });
+        }
+    }
 
     function handleSaveExam() {
         if (!selectedCourse || !selectedLesson || !examName) {
@@ -127,12 +194,24 @@ export default function Admin_set_test() {
             }
         }
         
+        // التحقق من نوع الامتحان
+        if (!examType || !['current', 'previous'].includes(examType)) {
+            alert('يرجى اختيار نوع الامتحان (حالي أو سابق)');
+            return;
+        }
+        
+        // التحقق من وجود امتحان بنفس النوع
+        if (existingExams[examType]) {
+            alert(`يوجد امتحان ${examType === 'current' ? 'حالي' : 'سابق'} لهذا الدرس بالفعل. استخدم زر التحديث لتعديله.`);
+            return;
+        }
+        
         // تجهيز البيانات
         const data = {
             name: examName,
             courseId: selectedCourse,
             lessonId: selectedLesson,
-            examType: examType, // إضافة نوع الامتحان
+            examType: examType,
             questions: questions.map(q => ({
                 text: q.text,
                 image: q.image,
@@ -141,6 +220,7 @@ export default function Admin_set_test() {
             }))
         };
         
+        // إنشاء امتحان جديد
         axios.post(`${API_BASE_URL}/api/exams`, data, {
             headers: { 
                 'Content-Type': 'application/json',
@@ -148,18 +228,125 @@ export default function Admin_set_test() {
             }
         })
         .then(res => {
-            alert('تم حفظ الامتحان بنجاح!');
-            // إعادة تعيين الفورم
-            setExamName('');
-            setExamType('current'); // إعادة تعيين نوع الامتحان
-            setQuestions([]);
+            alert('تم إنشاء امتحان جديد بنجاح!');
+            // تحديث البيانات
+            const examData = res.data.exam || res.data;
+            setCurrentExamId(examData._id);
+            setExistingExams(prev => ({
+                ...prev,
+                [examType]: examData
+            }));
+        })
+        .catch(err => {
+            if (err.response?.status === 401 || err.response?.status === 403) {
+                alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+                window.location.href = '/login';
+            } else if (err.response?.status === 400) {
+                // إذا كان هناك امتحان موجود، عبئ البيانات
+                const existingExam = err.response.data.existingExam;
+                if (existingExam) {
+                    setExamName(existingExam.name || '');
+                    setCurrentExamId(existingExam._id);
+                    setQuestions((existingExam.questions || []).map(q => ({
+                        text: q.text,
+                        image: q.image,
+                        answers: (q.answers || []).map(a => a.text),
+                        correctAnswerIndex: q.correctAnswerIndex
+                    })));
+                    setExistingExams(prev => ({
+                        ...prev,
+                        [examType]: existingExam
+                    }));
+                }
+                alert(err.response.data.message);
+            } else {
+                alert('حدث خطأ أثناء حفظ الامتحان: ' + (err.response?.data?.message || err.message));
+            }
+        });
+    }
+
+    // دالة تحديث الامتحان
+    function handleUpdateExam() {
+        if (!currentExamId) {
+            alert('لا يوجد امتحان للتحديث');
+            return;
+        }
+        
+        if (!examName || questions.length === 0) {
+            alert('يرجى ملء جميع البيانات المطلوبة');
+            return;
+        }
+        
+        // تجهيز البيانات
+        const data = {
+            name: examName,
+            courseId: selectedCourse,
+            lessonId: selectedLesson,
+            examType: examType,
+            questions: questions.map(q => ({
+                text: q.text,
+                image: q.image,
+                answers: q.answers.map(a => ({ text: a })),
+                correctAnswerIndex: q.correctAnswerIndex
+            }))
+        };
+        
+        // تحديث الامتحان
+        axios.put(`${API_BASE_URL}/api/exams/${currentExamId}`, data, {
+            headers: { 
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            }
+        })
+        .then(res => {
+            alert('تم تحديث الامتحان بنجاح!');
+            // تحديث البيانات
+            setExistingExams(prev => ({
+                ...prev,
+                [examType]: res.data.exam
+            }));
         })
         .catch(err => {
             if (err.response?.status === 401 || err.response?.status === 403) {
                 alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
                 window.location.href = '/login';
             } else {
-                alert('حدث خطأ أثناء حفظ الامتحان: ' + (err.response?.data?.message || err.message));
+                alert('حدث خطأ أثناء تحديث الامتحان: ' + (err.response?.data?.message || err.message));
+            }
+        });
+    }
+    
+    // دالة حذف الامتحان
+    function handleDeleteExam() {
+        if (!currentExamId) {
+            alert('لا يوجد امتحان للحذف');
+            return;
+        }
+        
+        if (!confirm(`هل أنت متأكد من حذف الامتحان "${examName}"؟`)) {
+            return;
+        }
+        
+        axios.delete(`${API_BASE_URL}/api/exams/${currentExamId}`, {
+            headers: getAuthHeaders()
+        })
+        .then(res => {
+            alert('تم حذف الامتحان بنجاح!');
+            // إعادة تعيين البيانات
+            setExamName('');
+            setQuestions([]);
+            setCurrentExamId(null);
+            setExistingExams(prev => ({
+                ...prev,
+                [examType]: null
+            }));
+        })
+        .catch(err => {
+            if (err.response?.status === 401 || err.response?.status === 403) {
+                alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+                window.location.href = '/login';
+            } else {
+                alert('حدث خطأ أثناء حذف الامتحان: ' + (err.response?.data?.message || err.message));
             }
         });
     }
@@ -214,18 +401,34 @@ export default function Admin_set_test() {
                     onChange={e => setExamName(e.target.value)}
                 />
                 
-                {/* اختيار نوع الامتحان */}
-                <div className="flex gap-2 items-center">
-                    <label className="text-bluetheme-500 text-xl font-bold">نوع الامتحان:</label>
-                    <select
-                        className="bg-bluetheme-500 text-white text-xl rounded-xl p-2 text-center"
-                        value={examType}
-                        onChange={e => setExamType(e.target.value)}
-                    >
-                        <option value="current">امتحان حالي</option>
-                        <option value="previous">امتحان سابق</option>
-                    </select>
-                </div>
+                                 {/* اختيار نوع الامتحان - أزرار تحديد */}
+                 <div className="flex gap-2 items-center">
+                     <label className="text-bluetheme-500 text-xl font-bold">نوع الامتحان:</label>
+                     <div className="flex gap-2">
+                         <button
+                             type="button"
+                             className={`px-4 py-2 rounded-lg text-lg font-bold transition-colors ${
+                                 examType === 'current' 
+                                     ? 'bg-green-600 text-white' 
+                                     : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                             }`}
+                             onClick={() => setExamType('current')}
+                         >
+                             امتحان حالي {existingExams.current && <span className="text-xs">(موجود)</span>}
+                         </button>
+                         <button
+                             type="button"
+                             className={`px-4 py-2 rounded-lg text-lg font-bold transition-colors ${
+                                 examType === 'previous' 
+                                     ? 'bg-green-600 text-white' 
+                                     : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                             }`}
+                             onClick={() => setExamType('previous')}
+                         >
+                             امتحان سابق {existingExams.previous && <span className="text-xs">(موجود)</span>}
+                         </button>
+                     </div>
+                 </div>
             </div>
 
             <div className="flex flex-col gap-7 w-full">
@@ -393,9 +596,17 @@ export default function Admin_set_test() {
 
             <div className="flex flex-row gap-3 w-full justify-center mt-10 mb-32">
                 <button className="bg-green-500 text-2xl p-2 rounded-lg hover:bg-green-600 cursor-pointer" onClick={handleAddQuestion} disabled={!selectedCourse || !selectedLesson}>اضافة سؤال</button>
-                <button className="bg-blue-500 text-2xl p-2 rounded-lg hover:bg-blue-600 cursor-pointer" onClick={handleSaveExam} disabled={!selectedCourse || !selectedLesson}>حفظ الامتحان</button>
+                
+                {/* أزرار الامتحان */}
+                {currentExamId ? (
+                    <>
+                        <button className="bg-yellow-500 text-2xl p-2 rounded-lg hover:bg-yellow-600 cursor-pointer" onClick={handleUpdateExam} disabled={!selectedCourse || !selectedLesson}>تحديث الامتحان</button>
+                        <button className="bg-red-500 text-2xl p-2 rounded-lg hover:bg-red-600 cursor-pointer" onClick={handleDeleteExam} disabled={!selectedCourse || !selectedLesson}>حذف الامتحان</button>
+                    </>
+                ) : (
+                    <button className="bg-blue-500 text-2xl p-2 rounded-lg hover:bg-blue-600 cursor-pointer" onClick={handleSaveExam} disabled={!selectedCourse || !selectedLesson}>حفظ الامتحان</button>
+                )}
             </div>
         </div>
-        <Bottom_nav />
     </>
 }
