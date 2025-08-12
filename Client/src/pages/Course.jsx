@@ -509,6 +509,10 @@ export default function Course() {
     }, [lessons, lessonViewCounts]);
 
     const canTakeCurrentExam = useCallback((lessonId) => {
+        // الدرس الأول متاح دائماً
+        const lessonIndex = lessons.findIndex(l => l._id === lessonId);
+        if (lessonIndex === 0) return true;
+        
         // يجب أن يشاهد الفيديو أولاً
         const watched = watchedLessons?.some(l => {
             if (!l) return false;
@@ -517,7 +521,7 @@ export default function Course() {
         });
         
         return watched;
-    }, [watchedLessons]);
+    }, [lessons, watchedLessons]);
 
     const handleCurrentExam = useCallback(async (lessonId) => {
         try {
@@ -739,8 +743,8 @@ export default function Course() {
                         })
                         : null;
                     
-                                         // منطق التفعيل المبسط
-                     const canAccess = lessonStatuses[lesson._id]?.canAccessLesson || false;
+                                                             // منطق التفعيل المبسط
+                    const canAccess = lessonIndex === 0 ? true : (lessonStatuses[lesson._id]?.canAccessLesson || false);
                     
                     const lessonUnlocked = courseUnlocked || (lessonActivation && (lessonActivation.video || lessonActivation.assignment)) || canAccess;
                     
