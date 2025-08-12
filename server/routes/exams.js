@@ -74,12 +74,30 @@ router.get('/lesson/:lessonId', authenticateToken, async (req, res) => {
 router.get('/lesson/:lessonId/type/:examType', authenticateToken, async (req, res) => {
   try {
     const { lessonId, examType } = req.params;
+    
+    // التحقق من صحة نوع الامتحان
+    if (!['current', 'previous'].includes(examType)) {
+      return res.status(400).json({ message: 'نوع الامتحان غير صحيح' });
+    }
+    
     const exams = await Exam.find({ 
       lessonId, 
       examType: examType // 'current' أو 'previous'
     }).populate('questions');
+    
+    console.log(`Found ${exams.length} exams for lesson ${lessonId} with type ${examType}`);
+    
+    if (exams.length === 0) {
+      return res.status(404).json({ 
+        message: `لا يوجد امتحان من نوع ${examType === 'current' ? 'الحالي' : 'السابق'} لهذا الدرس`,
+        lessonId,
+        examType
+      });
+    }
+    
     res.json(exams);
   } catch (err) {
+    console.error('Error fetching exam:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
@@ -170,6 +188,7 @@ router.get('/can-take-current/:courseId/:lessonId', authenticateToken, async (re
     const lessonActivation = user.purchasedLessons.find(l => 
       l.lessonId && l.lessonId.toString() === lessonId
     );
+    
     // التحقق من أن المستخدم شاهد الفيديو أولاً
     const watched = user.watchedLessons.some(l => 
       l.lessonId && l.lessonId.toString() === lessonId
@@ -180,13 +199,14 @@ router.get('/can-take-current/:courseId/:lessonId', authenticateToken, async (re
     }
 
     // التحقق من وجود امتحان للدرس
-    const exam = await Exam.findOne({ lessonId });
+    const exam = await Exam.findOne({ lessonId, examType: 'current' });
     if (!exam) {
       return res.json({ canTake: false, reason: 'No exam available' });
     }
 
     res.json({ canTake: true, examId: exam._id });
   } catch (err) {
+    console.error('Error in can-take-current:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
@@ -365,6 +385,53 @@ router.get('/lesson-status/:courseId/:lessonId', authenticateToken, async (req, 
       lessonActivated: !!lessonActivation
     });
   } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// مسار لاختبار وجود الامتحانات
+router.get('/test-exams', async (req, res) => {
+  try {
+    const exams = await Exam.find().populate('questions');
+    const examCount = exams.length;
+    
+    console.log(`Total exams in database: ${examCount}`);
+    
+    res.json({
+      totalExams: examCount,
+      exams: exams.map(exam => ({
+        id: exam._id,
+        name: exam.name,
+        courseId: exam.courseId,
+        lessonId: exam.lessonId,
+        examType: exam.examType,
+        questionCount: exam.questions.length
+      }))
+    });
+  } catch (err) {
+    console.error('Error testing exams:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// مسار لاختبار امتحانات درس معين
+router.get('/test-lesson-exams/:lessonId', async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    
+    const currentExams = await Exam.find({ lessonId, examType: 'current' });
+    const previousExams = await Exam.find({ lessonId, examType: 'previous' });
+    
+    console.log(`Lesson ${lessonId}: ${currentExams.length} current exams, ${previousExams.length} previous exams`);
+    
+    res.json({
+      lessonId,
+      currentExams: currentExams.length,
+      previousExams: previousExams.length,
+      totalExams: currentExams.length + previousExams.length
+    });
+  } catch (err) {
+    console.error('Error testing lesson exams:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
