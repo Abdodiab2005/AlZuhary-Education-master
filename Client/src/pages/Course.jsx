@@ -733,6 +733,7 @@ export default function Course() {
                 )}
 
                 {lessons.map((lesson, idx) => {
+                    const lessonIndex = idx; // تعريف lessonIndex
                     // الدرس مفتوح إذا كان المستخدم اشترى الكورس أو اشترى الدرس
                     const courseUnlocked = purchasedCourses.includes(course?._id);
                     // ابحث عن كائن التفعيل لهذا الدرس
@@ -743,7 +744,7 @@ export default function Course() {
                         })
                         : null;
                     
-                                                             // منطق التفعيل المبسط
+                    // منطق التفعيل المبسط
                     const canAccess = lessonIndex === 0 ? true : (lessonStatuses[lesson._id]?.canAccessLesson || false);
                     
                     const lessonUnlocked = courseUnlocked || (lessonActivation && (lessonActivation.video || lessonActivation.assignment)) || canAccess;
