@@ -638,7 +638,7 @@ router.post('/:courseId/lessons/:lessonId/buy-views', authenticateToken, async (
   }
 });
 
-// التحقق من إمكانية الوصول للدرس بناءً على نجاح امتحان الدرس السابق
+// التحقق من إمكانية الوصول للدرس بناءً على تفعيل الدرس
 router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
@@ -666,43 +666,19 @@ router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async
       l.lessonId && l.lessonId.toString() === lessonId
     );
 
-
-    // التحقق من نجاح امتحان الدرس الحالي للدرس السابق
-    if (currentLessonIndex > 0) {
-      const previousLessonId = lessons[currentLessonIndex - 1]._id;
-      const previousExamScore = user.examScores.find(e => 
-        e.lessonId && e.lessonId.toString() === previousLessonId.toString()
-      );
-
-      // إذا نجح في الامتحان الطبيعي، يمكن الوصول للدرس
-      if (previousExamScore && previousExamScore.passed && 
-          previousExamScore.score >= (previousExamScore.total * 0.5)) {
-        return res.json({ 
-          canAccess: true, 
-          reason: 'Previous exam passed',
-          previousLessonId: previousLessonId.toString()
-        });
-      }
-
-
-    }
-
-    // إذا لم ينجح ولم يكن مفعل، لا يمكن الوصول
-    if (currentLessonIndex > 0) {
-      const previousLessonId = lessons[currentLessonIndex - 1]._id;
-      const previousExamScore = user.examScores.find(e => 
-        e.lessonId && e.lessonId.toString() === previousLessonId.toString()
-      );
-
+    // يمكن الوصول للدرس إذا كان الكورس مفعل أو تم تفعيل الدرس
+    if (courseUnlocked || lessonActivation) {
       return res.json({ 
-        canAccess: false, 
-        reason: 'Previous exam not passed with 50% or higher',
-        requiredScore: previousExamScore ? Math.ceil(previousExamScore.total * 0.5) : 0,
-        currentScore: previousExamScore ? previousExamScore.score : 0,
-        totalQuestions: previousExamScore ? previousExamScore.total : 0,
-        previousLessonId: previousLessonId.toString()
+        canAccess: true, 
+        reason: 'Lesson activated'
       });
     }
+
+    // إذا لم يكن مفعل، لا يمكن الوصول
+    return res.json({ 
+      canAccess: false, 
+      reason: 'Lesson not activated'
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
@@ -724,7 +700,6 @@ router.get('/:courseId/lessons/:lessonId/status', authenticateToken, async (req,
     
     // التحقق من إمكانية الوصول للدرس
     let canAccessLesson = true;
-    let previousExamPassed = true;
     let previousLessonId = null;
     
     // التحقق من تفعيل الدرس الحالي
@@ -732,23 +707,12 @@ router.get('/:courseId/lessons/:lessonId/status', authenticateToken, async (req,
     const lessonActivation = user.purchasedLessons.find(l => 
       l.lessonId && l.lessonId.toString() === lessonId
     );
- if (currentLessonIndex > 0) {
+
+    // يمكن الوصول للدرس إذا كان الكورس مفعل أو تم تفعيل الدرس
+    canAccessLesson = courseUnlocked || !!lessonActivation;
+
+    if (currentLessonIndex > 0) {
       previousLessonId = lessons[currentLessonIndex - 1]._id;
-      
-      // التحقق من نجاح امتحان الدرس السابق
-      const previousExamScore = user.examScores.find(e => 
-        e.lessonId && e.lessonId.toString() === previousLessonId.toString()
-      );
-      
-      // إذا نجح في الامتحان الطبيعي، يمكن الوصول للدرس
-      if (previousExamScore && previousExamScore.passed && 
-          previousExamScore.score >= (previousExamScore.total * 0.5)) {
-        canAccessLesson = true;
-        previousExamPassed = true;
-      } else {
-        canAccessLesson = false;
-        previousExamPassed = false;
-      }
     }
 
     // التحقق من إمكانية أخذ امتحان الدرس الحالي
@@ -788,7 +752,6 @@ router.get('/:courseId/lessons/:lessonId/status', authenticateToken, async (req,
       canAccessLesson,
       canTakeCurrentExam,
       canTakePreviousExam,
-      previousExamPassed,
       isFirstLesson: currentLessonIndex === 0,
       remainingViews,
       viewLimit,
@@ -800,9 +763,6 @@ router.get('/:courseId/lessons/:lessonId/status', authenticateToken, async (req,
       debug: {
         currentLessonIndex,
         previousLessonId: previousLessonId ? previousLessonId.toString() : null,
-        previousExamScore: user.examScores.find(e => 
-          e.lessonId && e.lessonId.toString() === (previousLessonId ? previousLessonId.toString() : '')
-        ),
         courseUnlocked,
         lessonActivation: lessonActivation ? {
           video: lessonActivation.video,

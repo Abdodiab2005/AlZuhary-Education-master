@@ -42,11 +42,17 @@ const authenticateToken = (req, res, next) => {
 // إضافة امتحان جديد لدرس معين
 router.post('/', async (req, res) => {
   try {
-    const { name, courseId, lessonId, questions } = req.body;
+    const { name, courseId, lessonId, examType, questions } = req.body;
     // إنشاء الأسئلة أولاً
     const createdQuestions = await Question.insertMany(questions);
     const questionIds = createdQuestions.map(q => q._id);
-    const exam = new Exam({ name, courseId, lessonId, questions: questionIds });
+    const exam = new Exam({ 
+      name, 
+      courseId, 
+      lessonId, 
+      examType: examType || 'current', // استخدام examType أو 'current' كقيمة افتراضية
+      questions: questionIds 
+    });
     await exam.save();
     res.status(201).json(exam);
   } catch (err) {
@@ -58,6 +64,20 @@ router.post('/', async (req, res) => {
 router.get('/lesson/:lessonId', authenticateToken, async (req, res) => {
   try {
     const exams = await Exam.find({ lessonId: req.params.lessonId }).populate('questions');
+    res.json(exams);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// جلب امتحانات درس معين حسب النوع (حالي/سابق)
+router.get('/lesson/:lessonId/type/:examType', authenticateToken, async (req, res) => {
+  try {
+    const { lessonId, examType } = req.params;
+    const exams = await Exam.find({ 
+      lessonId, 
+      examType: examType // 'current' أو 'previous'
+    }).populate('questions');
     res.json(exams);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -206,11 +226,6 @@ router.get('/can-take-previous/:courseId/:lessonId', authenticateToken, async (r
 
     // إذا كان الكورس مفعل أو تم تفعيل الدرس السابق، يمكن أخذ الامتحان
     if (courseUnlocked || previousLessonActivation) {
-      // التحقق من وجود امتحان للدرس السابق
-      const exam = await Exam.findOne({ lessonId: previousLessonId });
-      if (!exam) {
-        return res.json({ canTake: false, reason: 'No exam available for previous lesson' });
-      }
       return res.json({ canTake: true, previousLessonId });
     }
 
@@ -221,62 +236,51 @@ router.get('/can-take-previous/:courseId/:lessonId', authenticateToken, async (r
   }
 });
 
-// التحقق من إمكانية الوصول للدرس (يتطلب نجاح امتحان الدرس السابق)
+// التحقق من إمكانية الوصول للدرس بناءً على نجاح امتحان الدرس السابق
 router.get('/can-access-lesson/:courseId/:lessonId', authenticateToken, async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // جلب الكورس للتحقق من ترتيب الدروس
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: 'Course not found' });
 
     const lessons = course.lessons;
     const currentLessonIndex = lessons.findIndex(l => l._id.toString() === lessonId);
     
-    // إذا كان الدرس الأول، يمكن الوصول إليه دائماً
+    // الدرس الأول متاح دائماً
     if (currentLessonIndex === 0) {
       return res.json({ canAccess: true, reason: 'First lesson' });
     }
 
-    // التحقق من تفعيل الدرس الحالي
-    const courseUnlocked = user.purchasedCourses.includes(courseId);
-    const lessonActivation = user.purchasedLessons.find(l => 
-      l.lessonId && l.lessonId.toString() === lessonId
+    // التحقق من نجاح امتحان الدرس السابق
+    const previousLessonId = lessons[currentLessonIndex - 1]._id;
+    const previousExamScore = user.examScores.find(score => 
+      score.lessonId && score.lessonId.toString() === previousLessonId.toString()
     );
 
+    // إذا لم يكن هناك امتحان للدرس السابق، يمكن الوصول
+    if (!previousExamScore) {
+      return res.json({ canAccess: true, reason: 'No previous exam' });
+    }
 
-    // التحقق من نجاح امتحان الدرس الحالي للدرس السابق
-    if (currentLessonIndex > 0) {
-      const previousLessonId = lessons[currentLessonIndex - 1]._id;
-      const previousExamScore = user.examScores.find(e => 
-        e.lessonId && e.lessonId.toString() === previousLessonId.toString()
-      );
+    // إذا نجح في امتحان الدرس السابق (50%+)، يمكن الوصول
+    if (previousExamScore.passed) {
+      return res.json({ canAccess: true, reason: 'Previous exam passed' });
+    }
 
-      // إذا نجح في الامتحان الطبيعي، يمكن الوصول للدرس
-      if (previousExamScore && previousExamScore.passed && 
-          previousExamScore.score >= (previousExamScore.total * 0.5)) {
-        return res.json({ canAccess: true, reason: 'Previous exam passed' });
+    // إذا لم ينجح في امتحان الدرس السابق، لا يمكن الوصول
+    return res.json({ 
+      canAccess: false, 
+      reason: 'Previous exam not passed',
+      previousExamScore: {
+        score: previousExamScore.score,
+        total: previousExamScore.total,
+        percentage: Math.round((previousExamScore.score / previousExamScore.total) * 100)
       }
+    });
 
-
-    }
-
-    // إذا لم ينجح ولم يكن مفعل، لا يمكن الوصول
-    if (currentLessonIndex > 0) {
-      const previousLessonId = lessons[currentLessonIndex - 1]._id;
-      const previousExamScore = user.examScores.find(e => 
-        e.lessonId && e.lessonId.toString() === previousLessonId.toString()
-      );
-
-      return res.json({ 
-        canAccess: false, 
-        reason: 'Previous exam not passed with 50% or higher',
-        requiredScore: previousExamScore ? (previousExamScore.total * 0.5) : 0,
-        currentScore: previousExamScore ? previousExamScore.score : 0
-      });
-    }
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
@@ -298,7 +302,6 @@ router.get('/lesson-status/:courseId/:lessonId', authenticateToken, async (req, 
     
     // التحقق من إمكانية الوصول للدرس
     let canAccessLesson = true;
-    let previousExamPassed = true;
     
     // التحقق من تفعيل الدرس الحالي
     const courseUnlocked = user.purchasedCourses.includes(courseId);
@@ -306,24 +309,9 @@ router.get('/lesson-status/:courseId/:lessonId', authenticateToken, async (req, 
       if (!l.lessonId) return false;
       return l.lessonId.toString() === lessonId;
     });
- if (currentLessonIndex > 0) {
-      const previousLessonId = lessons[currentLessonIndex - 1]._id;
-      
-      // التحقق من نجاح امتحان الدرس الحالي للدرس السابق
-      const previousExamScore = user.examScores.find(e => 
-        e.lessonId && e.lessonId.toString() === previousLessonId.toString()
-      );
-      
-      // إذا نجح في الامتحان الطبيعي، يمكن الوصول للدرس
-      if (previousExamScore && previousExamScore.passed && 
-          previousExamScore.score >= (previousExamScore.total * 0.5)) {
-        canAccessLesson = true;
-        previousExamPassed = true;
-      } else {
-        canAccessLesson = false;
-        previousExamPassed = false;
-      }
-    }
+
+    // يمكن الوصول للدرس إذا كان الكورس مفعل أو تم تفعيل الدرس
+    canAccessLesson = courseUnlocked || !!lessonActivation;
 
     // التحقق من إمكانية أخذ امتحان الدرس الحالي
     let canTakeCurrentExam = false;
@@ -370,7 +358,6 @@ router.get('/lesson-status/:courseId/:lessonId', authenticateToken, async (req, 
       canAccessLesson,
       canTakeCurrentExam,
       canTakePreviousExam,
-      previousExamPassed,
       isFirstLesson: currentLessonIndex === 0,
       remainingViews,
       watched,

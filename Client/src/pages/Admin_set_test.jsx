@@ -10,6 +10,7 @@ export default function Admin_set_test() {
     const [lessons, setLessons] = useState([]);
     const [selectedLesson, setSelectedLesson] = useState('');
     const [examName, setExamName] = useState('');
+    const [examType, setExamType] = useState('current'); // 'current' أو 'previous'
     const [questions, setQuestions] = useState([]);
 
     useEffect(() => {
@@ -44,6 +45,7 @@ export default function Admin_set_test() {
         } else {
             setLessons([]);
             setSelectedLesson('');
+            setExamType('current'); // إعادة تعيين نوع الامتحان
         }
     }, [selectedCourse, courses]);
 
@@ -65,6 +67,7 @@ export default function Admin_set_test() {
                         // إذا كان هناك امتحان، عبئ الأسئلة
                         const exam = res.data[0];
                         setExamName(exam.name || '');
+                        setExamType(exam.examType || 'current'); // تعيين نوع الامتحان
                         setQuestions((exam.questions || []).map(q => ({
                             text: q.text,
                             image: q.image,
@@ -73,6 +76,7 @@ export default function Admin_set_test() {
                         })));
                     } else {
                         setExamName('');
+                        setExamType('current'); // إعادة تعيين للنوع الافتراضي
                         setQuestions([]);
                     }
                 })
@@ -88,6 +92,7 @@ export default function Admin_set_test() {
         } else {
             setQuestions([]);
             setExamName('');
+            setExamType('current'); // إعادة تعيين نوع الامتحان
         }
     }, [selectedCourse, selectedLesson]);
 
@@ -121,6 +126,7 @@ export default function Admin_set_test() {
             name: examName,
             courseId: selectedCourse,
             lessonId: selectedLesson,
+            examType: examType, // إضافة نوع الامتحان
             questions: questions.map(q => ({
                 text: q.text,
                 image: q.image,
@@ -139,6 +145,7 @@ export default function Admin_set_test() {
             alert('تم حفظ الامتحان بنجاح!');
             // إعادة تعيين الفورم
             setExamName('');
+            setExamType('current'); // إعادة تعيين نوع الامتحان
             setQuestions([]);
         })
         .catch(err => {
@@ -192,6 +199,19 @@ export default function Admin_set_test() {
                     value={examName}
                     onChange={e => setExamName(e.target.value)}
                 />
+                
+                {/* اختيار نوع الامتحان */}
+                <div className="flex gap-2 items-center">
+                    <label className="text-bluetheme-500 text-xl font-bold">نوع الامتحان:</label>
+                    <select
+                        className="bg-bluetheme-500 text-white text-xl rounded-xl p-2 text-center"
+                        value={examType}
+                        onChange={e => setExamType(e.target.value)}
+                    >
+                        <option value="current">امتحان حالي</option>
+                        <option value="previous">امتحان سابق</option>
+                    </select>
+                </div>
             </div>
 
             <div className="flex flex-col gap-7 w-full">

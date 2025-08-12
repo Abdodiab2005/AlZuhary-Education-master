@@ -204,7 +204,8 @@ export default function Course() {
         const statuses = {};
         for (const lesson of lessons) {
             try {
-                const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lesson._id}/status`, {
+                // استخدام API الجديد للامتحانات
+                const response = await axios.get(`${API_BASE_URL}/api/exams/lesson-status/${courseId}/${lesson._id}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 statuses[lesson._id] = response.data;
@@ -213,7 +214,6 @@ export default function Course() {
                     canAccessLesson: false,
                     canTakeCurrentExam: false,
                     canTakePreviousExam: false,
-                    previousExamPassed: false,
                     isFirstLesson: false
                 };
             }
@@ -269,7 +269,8 @@ export default function Course() {
                 const statuses = {};
                 for (const lesson of lessons) {
                     try {
-                        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lesson._id}/status`, {
+                        // استخدام API الجديد للامتحانات
+                        const response = await axios.get(`${API_BASE_URL}/api/exams/lesson-status/${courseId}/${lesson._id}`, {
                             headers: { Authorization: `Bearer ${token}` }
                         });
                         statuses[lesson._id] = response.data;
@@ -476,33 +477,25 @@ export default function Course() {
 
 
 
-    function canAccessLesson(idx) {
-        // إذا كان الدرس الأول، يمكن الوصول إليه دائماً
-        if (idx === 0) {
-            return true;
-        }
-
-        // استخدام البيانات من السيرفر
-        const lesson = lessons[idx];
-        if (!lesson) return false;
-
-        const lessonStatus = lessonStatuses[lesson._id];
-        if (lessonStatus) {
-            return lessonStatus.canAccessLesson;
-        }
-
-        // الحساب المحلي كبديل
-        const prevLessonId = lessons[idx - 1]?._id;
-        if (!prevLessonId) return false;
+    // دالة للتحقق من إمكانية الوصول للدرس
+    const canAccessLesson = async (lessonIndex) => {
+        // الدرس الأول متاح دائماً
+        if (lessonIndex === 0) return true;
         
-        // البحث في examScores للدرس السابق
-        const prevExam = examScores.find(e => 
-            e.lessonId && e.lessonId.toString() === prevLessonId.toString()
-        );
-
-        // يجب نجاح الامتحان السابق بنسبة 50% على الأقل
-        return prevExam && prevExam.passed && prevExam.score >= (prevExam.total * 0.5);
-    }
+        // التحقق من نجاح امتحان الدرس السابق
+        const previousLessonId = lessons[lessonIndex - 1]?._id;
+        if (!previousLessonId) return false;
+        
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`${API_BASE_URL}/api/exams/can-access-lesson/${courseId}/${lessons[lessonIndex]._id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            return response.data.canAccess;
+        } catch (err) {
+            return false;
+        }
+    };
 
     function getRemainingViews(lessonId) {
         const lesson = lessons.find(l => l._id === lessonId);
@@ -543,7 +536,7 @@ export default function Course() {
             }
 
             // جلب الامتحان
-            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, {
+            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}/type/current`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             
@@ -585,7 +578,7 @@ export default function Course() {
             }
 
             // جلب امتحان الدرس السابق
-            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${canTakeResponse.data.previousLessonId}`, {
+            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${canTakeResponse.data.previousLessonId}/type/previous`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             
@@ -742,7 +735,16 @@ export default function Course() {
                         : null;
                     
                     // منطق التفعيل المبسط
-                    const canAccess = canAccessLesson(idx);
+                    const [canAccess, setCanAccess] = useState(false);
+                    
+                    useEffect(() => {
+                        const checkAccess = async () => {
+                            const access = await canAccessLesson(idx);
+                            setCanAccess(access);
+                        };
+                        checkAccess();
+                    }, [idx, examScores]);
+                    
                     const lessonUnlocked = courseUnlocked || (lessonActivation && (lessonActivation.video || lessonActivation.assignment)) || canAccess;
                     
                     // إضافة forceUpdate لضمان تحديث الأزرار
@@ -808,7 +810,7 @@ export default function Course() {
 
                                                         // التحقق من نجاح الامتحان السابق
                                                         if (!canAccess) {
-                                                            window.alert('يجب نجاح امتحان الحصة السابقة أولاً');
+                                                            window.alert('يجب نجاح امتحان الحصة السابقة أولاً (50%+)');
                                                             return;
                                                         }
 
@@ -844,7 +846,7 @@ export default function Course() {
                                                     }}
                                                     disabled={getRemainingViews(lesson._id) <= 0 || !canAccess}
                                                 >
-                                                    {getRemainingViews(lesson._id) <= 0 ? 'انتهت مرات المشاهدة' : (canAccess ? 'دخول الحصة' : 'يجب نجاح امتحان الحصة السابقة')}
+                                                    {getRemainingViews(lesson._id) <= 0 ? 'انتهت مرات المشاهدة' : (canAccess ? 'دخول الحصة' : 'يجب نجاح امتحان الحصة السابقة (50%+)')}
                                                 </button>
                                                 <span className={`text-xs ${getRemainingViews(lesson._id) <= 0 ? 'text-red-500' : 'text-gray-600'}`}>
                                                     متبقي: {getRemainingViews(lesson._id)} مشاهدة
