@@ -205,7 +205,7 @@ export default function Course() {
         for (const lesson of lessons) {
             try {
                 // استخدام API الجديد للامتحانات
-                const response = await axios.get(`${API_BASE_URL}/api/exams/lesson-status/${courseId}/${lesson._id}`, {
+                const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/lesson-status/${lesson._id}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 statuses[lesson._id] = response.data;
@@ -270,7 +270,7 @@ export default function Course() {
                 for (const lesson of lessons) {
                     try {
                         // استخدام API الجديد للامتحانات
-                        const response = await axios.get(`${API_BASE_URL}/api/exams/lesson-status/${courseId}/${lesson._id}`, {
+                        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/lesson-status/${lesson._id}`, {
                             headers: { Authorization: `Bearer ${token}` }
                         });
                         statuses[lesson._id] = response.data;
@@ -557,32 +557,23 @@ export default function Course() {
                 return;
             }
             
-            // البحث عن الدرس السابق
-            const currentLessonIndex = lessons.findIndex(l => l._id === lessonId);
-            if (currentLessonIndex <= 0) {
-                window.alert('لا يوجد درس سابق');
-                return;
-            }
-            
-            const previousLesson = lessons[currentLessonIndex - 1];
-            
-            // جلب الامتحانات للدرس السابق
-            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${previousLesson._id}`, {
+            // جلب الامتحانات لنفس الدرس
+            const response = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             
             if (response.data && response.data.organized && response.data.organized.previous) {
-                navigate(`/exam/${previousLesson._id}`, {
+                navigate(`/exam/${lessonId}`, {
                     state: { exam: response.data.organized.previous }
                 });
             } else {
-                window.alert('لا يوجد امتحان سابق للدرس السابق');
+                window.alert('لا يوجد امتحان سابق لهذا الدرس');
             }
         } catch (error) {
-            console.error('خطأ في جلب امتحان الدرس السابق:', error);
+            console.error('خطأ في جلب الامتحان السابق:', error);
             window.alert('حدث خطأ في جلب الامتحان');
         }
-    }, [lessons, navigate]);
+    }, [navigate]);
 
     // تحديث البيانات من الخادم
     const refreshData = useCallback(async () => {
@@ -763,10 +754,19 @@ export default function Course() {
                     
                     // منطق تفعيل زر امتحان الحصة السابقة
                     let canTakePreviousExamBtn = false;
-                    let previousLessonId = null;
-                    if (idx > 0) { // في جميع الدروس من الدرس الثاني فصاعداً
-                        previousLessonId = lessons[idx - 1]?._id;
-                        canTakePreviousExamBtn = previousLessonId ? true : false; // مفعل دائماً إذا كان الدرس السابق موجود
+                    // تفعيل زر امتحان الحصة السابقة إذا كان هناك امتحان "سابق" في نفس الدرس
+                    canTakePreviousExamBtn = lessonStatuses[lesson._id]?.canTakePreviousExam || false;
+                    
+                    // منطق تفعيل زر امتحان الحصة الحالية
+                    let canTakeCurrentExamBtn = false;
+                    if (idx === 0) {
+                        // الدرس الأول متاح دائماً للامتحان
+                        canTakeCurrentExamBtn = true;
+                    } else {
+                        // يمكن أخذ الامتحان إذا كنت قد شاهدت الدرس (عدد المشاهدات أقل من العدد الأساسي)
+                        const remainingViews = getRemainingViews(lesson._id);
+                        const viewLimit = lesson.viewLimit || 5;
+                        canTakeCurrentExamBtn = remainingViews < viewLimit; // إذا كان عدد المشاهدات أقل من الحد الأقصى
                     }
                     
                     return (
@@ -902,19 +902,15 @@ export default function Course() {
                                             ? 'bg-amber-400 hover:bg-amber-500 cursor-pointer' 
                                             : 'bg-gray-400 cursor-not-allowed opacity-50'} text-black md:text-[0.95rem] lg:text-[1rem] p-1 rounded-lg text-[0.8rem]`}
                                         disabled={!canTakePreviousExamBtn}
-                                        onClick={() => {
-                                            if (previousLessonId) {
-                                                handlePreviousExam(previousLessonId);
-                                            }
-                                        }}
+                                        onClick={() => handlePreviousExam(lesson._id)}
                                     >
                                         امتحان الحصة السابقة
                                     </button>
                                     <button 
-                                        className={`${lessonStatuses[lesson._id]?.canTakeCurrentExam 
+                                        className={`${canTakeCurrentExamBtn 
                                             ? 'bg-amber-400 hover:bg-amber-500 cursor-pointer' 
                                             : 'bg-gray-400 cursor-not-allowed opacity-50'} text-black md:text-[0.95rem] lg:text-[1rem] p-1 rounded-lg text-[0.8rem]`}
-                                        disabled={!lessonStatuses[lesson._id]?.canTakeCurrentExam}
+                                        disabled={!canTakeCurrentExamBtn}
                                         onClick={() => handleCurrentExam(lesson._id)}
                                     >
                                         امتحان الحصة الحالية

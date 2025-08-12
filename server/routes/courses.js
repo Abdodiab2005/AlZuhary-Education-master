@@ -1,5 +1,6 @@
 const express = require('express');
 const Course = require('../models/Course');
+const Exam = require('../models/Exam');
 const multer = require('multer');
 const path = require('path');
 const User = require('../models/User');
@@ -596,7 +597,13 @@ router.post('/:courseId/lessons/:lessonId/buy-views', authenticateToken, async (
     const courseUnlocked = user.purchasedCourses.includes(course._id);
     const lessonActivation = user.purchasedLessons.find(l => l.lessonId.toString() === req.params.lessonId);
     
-    if (!courseUnlocked && !lessonActivation) {
+    // تحديد موقع الدرس في الكورس
+    const currentLessonIndex = course.lessons.findIndex(l => l._id.toString() === req.params.lessonId);
+    
+    // الدرس الأول متاح دائماً، أو إذا كان الكورس مشترى أو الدرس مشترى
+    if (currentLessonIndex === 0 || courseUnlocked || lessonActivation) {
+      // يمكن شراء مرات المشاهدة
+    } else {
       return res.status(403).json({ message: 'يجب شراء الدرس أولاً' });
     }
 
@@ -771,6 +778,100 @@ router.get('/:courseId/lessons/:lessonId/status', authenticateToken, async (req,
       }
     });
   } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// API لجلب حالة الدرس (للامتحانات)
+router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, res) => {
+  try {
+    const { courseId, lessonId } = req.params;
+    const userId = req.user.userId;
+
+    // جلب المستخدم
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'المستخدم غير موجود' });
+
+    // جلب الكورس
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: 'الكورس غير موجود' });
+
+    // البحث عن الدرس
+    const lesson = course.lessons.find(l => l._id.toString() === lessonId);
+    if (!lesson) return res.status(404).json({ message: 'الدرس غير موجود' });
+
+    // تحديد موقع الدرس في الكورس
+    const currentLessonIndex = course.lessons.findIndex(l => l._id.toString() === lessonId);
+    const previousLesson = currentLessonIndex > 0 ? course.lessons[currentLessonIndex - 1] : null;
+    const previousLessonId = previousLesson ? previousLesson._id : null;
+
+    // التحقق من شراء الكورس
+    const courseUnlocked = user.purchasedCourses.includes(courseId);
+
+    // التحقق من شراء الدرس
+    const lessonActivation = user.purchasedLessons.find(l => 
+      l.lessonId && l.lessonId.toString() === lessonId
+    );
+
+    // التحقق من مشاهدة الدرس
+    const hasWatched = user.watchedLessons.some(l => 
+      l.lessonId && l.lessonId.toString() === lessonId
+    );
+
+    // التحقق من إمكانية أخذ امتحان الدرس الحالي
+    let canTakeCurrentExam = false;
+    if (currentLessonIndex === 0) {
+      // الدرس الأول متاح دائماً للامتحان
+      canTakeCurrentExam = true;
+    } else if (courseUnlocked || lessonActivation) {
+      // يمكن أخذ الامتحان إذا كان الكورس مشترى أو الدرس مشترى
+      canTakeCurrentExam = true;
+    }
+
+    // التحقق من وجود امتحان للدرس السابق
+    let hasExam = false;
+    if (previousLessonId) {
+      try {
+        // البحث عن امتحان للدرس السابق
+        const exam = await Exam.findOne({ lessonId: previousLessonId });
+        hasExam = !!exam;
+      } catch (err) {
+        hasExam = false;
+      }
+    }
+
+    // التحقق من إمكانية أخذ امتحان الدرس السابق
+    let canTakePreviousExam = false;
+    if (previousLessonId && hasExam) {
+      // يمكن أخذ امتحان الدرس السابق إذا كان موجود وله امتحان
+      canTakePreviousExam = true;
+    }
+
+    // التحقق من إمكانية الوصول للدرس
+    let canAccessLesson = false;
+    if (currentLessonIndex === 0) {
+      // الدرس الأول متاح دائماً
+      canAccessLesson = true;
+    } else if (courseUnlocked) {
+      canAccessLesson = true;
+    } else if (lessonActivation) {
+      canAccessLesson = true;
+    }
+
+    res.json({
+      canAccessLesson,
+      canTakeCurrentExam,
+      canTakePreviousExam,
+      isFirstLesson: currentLessonIndex === 0,
+      courseUnlocked,
+      lessonActivation: !!lessonActivation,
+      hasWatched,
+      hasExam,
+      previousLessonId: previousLessonId ? previousLessonId.toString() : null
+    });
+
+  } catch (err) {
+    console.error('Error in lesson-status:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });

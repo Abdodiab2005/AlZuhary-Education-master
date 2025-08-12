@@ -6,8 +6,9 @@ import API_BASE_URL from '../apiConfig';
 axios.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      // إذا كان الخطأ متعلق بالـ token، احذف البيانات المحلية وأعد توجيه المستخدم
+    // التحقق من أن الخطأ 401 أو 403 يتعلق بالتوكن وليس بصلاحيات أخرى
+    if (error.response?.status === 401) {
+      // خطأ 401 يعني أن التوكن غير صالح أو منتهي الصلاحية
       localStorage.removeItem('token');
       localStorage.removeItem('userName');
       localStorage.removeItem('userType');
@@ -22,6 +23,7 @@ axios.interceptors.response.use(
         window.location.href = '/login';
       }
     }
+    // خطأ 403 لا يعني بالضرورة انتهاء صلاحية التوكن، قد يكون مشكلة في الصلاحيات
     return Promise.reject(error);
   }
 );
@@ -39,8 +41,8 @@ export const checkTokenValidity = async () => {
     });
     return true;
   } catch (error) {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      // حذف البيانات المحلية
+    if (error.response?.status === 401) {
+      // خطأ 401 يعني أن التوكن غير صالح أو منتهي الصلاحية
       localStorage.removeItem('token');
       localStorage.removeItem('userName');
       localStorage.removeItem('userType');
@@ -48,7 +50,8 @@ export const checkTokenValidity = async () => {
       localStorage.removeItem('userData');
       return false;
     }
-    return true; // إذا كان خطأ آخر، نفترض أن الـ token صالح
+    // خطأ 403 أو أي خطأ آخر لا يعني بالضرورة انتهاء صلاحية التوكن
+    return true;
   }
 };
 
