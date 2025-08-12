@@ -3,6 +3,7 @@ import axios from 'axios';
 import API_BASE_URL from '../apiConfig';
 import Bottom_nav from '../components/Bottom_nav';
 import { MdClose } from 'react-icons/md';
+import { checkTokenValidity, getAuthHeaders } from '../utils/tokenHandler';
 
 export default function Admin_set_test() {
     const [courses, setCourses] = useState([]);
@@ -12,18 +13,38 @@ export default function Admin_set_test() {
     const [examName, setExamName] = useState('');
     const [examType, setExamType] = useState('current'); // 'current' أو 'previous'
     const [questions, setQuestions] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        // فحص صلاحية التوكن عند تحميل الصفحة
+        const checkAuth = async () => {
+            const isValid = await checkTokenValidity();
+            if (!isValid) {
+                alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+                window.location.href = '/login';
+                return;
+            }
+            
+            // التحقق من أن المستخدم هو Admin أو Teacher
+            const userType = localStorage.getItem('userType');
+            if (userType !== 'Admin' && userType !== 'Teacher') {
+                alert('غير مصرح لك بالوصول لهذه الصفحة');
+                window.location.href = '/';
+                return;
+            }
+            
+            setIsLoading(false);
+        };
+        
+        checkAuth();
+    }, []);
 
     useEffect(() => {
         // جلب الكورسات عند تحميل الصفحة
-        const token = localStorage.getItem('token');
-        if (!token) {
-            alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
-            window.location.href = '/login';
-            return;
-        }
+        if (isLoading) return;
         
         axios.get(`${API_BASE_URL}/api/courses`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: getAuthHeaders()
         })
             .then(res => setCourses(res.data))
             .catch(err => {
@@ -34,7 +55,7 @@ export default function Admin_set_test() {
                     setCourses([]);
                 }
             });
-    }, []);
+    }, [isLoading]);
 
     useEffect(() => {
         // عند تغيير الكورس المختار، جلب الدروس الخاصة به
@@ -51,16 +72,9 @@ export default function Admin_set_test() {
 
     useEffect(() => {
         // عند تغيير الكورس أو الدرس، جلب الامتحان الحالي (إن وجد)
-        if (selectedCourse && selectedLesson) {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
-                window.location.href = '/login';
-                return;
-            }
-            
+        if (selectedCourse && selectedLesson && !isLoading) {
             axios.get(`${API_BASE_URL}/api/exams/lesson/${selectedLesson}`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: getAuthHeaders()
             })
                 .then(res => {
                     if (Array.isArray(res.data) && res.data.length > 0) {
@@ -113,14 +127,6 @@ export default function Admin_set_test() {
             }
         }
         
-        // التحقق من وجود التوكن
-        const token = localStorage.getItem('token');
-        if (!token) {
-            alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
-            window.location.href = '/login';
-            return;
-        }
-        
         // تجهيز البيانات
         const data = {
             name: examName,
@@ -138,7 +144,7 @@ export default function Admin_set_test() {
         axios.post(`${API_BASE_URL}/api/exams`, data, {
             headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
+                ...getAuthHeaders()
             }
         })
         .then(res => {
@@ -166,6 +172,14 @@ export default function Admin_set_test() {
             answers: ['', '', '', ''],
             correctAnswerIndex: 0
         }]);
+    }
+
+    if (isLoading) {
+        return (
+            <div className="h-screen w-full max-w-[650px] mr-auto ml-auto font-GraphicSchool flex flex-col justify-center items-center">
+                <div className="text-2xl text-bluetheme-500">جاري التحميل...</div>
+            </div>
+        );
     }
 
     return <>
@@ -246,20 +260,13 @@ export default function Admin_set_test() {
                                     id={`upload-img-${idx}`}
                                     onChange={async e => {
                                         if (e.target.files && e.target.files[0]) {
-                                            const token = localStorage.getItem('token');
-                                            if (!token) {
-                                                alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
-                                                window.location.href = '/login';
-                                                return;
-                                            }
-                                            
                                             const formData = new FormData();
                                             formData.append('file', e.target.files[0]);
                                             try {
                                                 const res = await axios.post(`${API_BASE_URL}/api/files/upload`, formData, { 
                                                     headers: { 
                                                         'Content-Type': 'multipart/form-data',
-                                                        'Authorization': `Bearer ${token}`
+                                                        ...getAuthHeaders()
                                                     } 
                                                 });
                                                 const newQuestions = [...questions];
@@ -389,5 +396,6 @@ export default function Admin_set_test() {
                 <button className="bg-blue-500 text-2xl p-2 rounded-lg hover:bg-blue-600 cursor-pointer" onClick={handleSaveExam} disabled={!selectedCourse || !selectedLesson}>حفظ الامتحان</button>
             </div>
         </div>
+        <Bottom_nav />
     </>
 }
