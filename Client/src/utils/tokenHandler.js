@@ -12,12 +12,15 @@ axios.interceptors.response.use(
       localStorage.removeItem('userName');
       localStorage.removeItem('userType');
       localStorage.removeItem('year_stage');
+      localStorage.removeItem('userData');
       
       // إظهار رسالة للمستخدم
       alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
       
       // إعادة توجيه إلى صفحة تسجيل الدخول
-      window.location.href = '/login';
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -42,6 +45,7 @@ export const checkTokenValidity = async () => {
       localStorage.removeItem('userName');
       localStorage.removeItem('userType');
       localStorage.removeItem('year_stage');
+      localStorage.removeItem('userData');
       return false;
     }
     return true; // إذا كان خطأ آخر، نفترض أن الـ token صالح

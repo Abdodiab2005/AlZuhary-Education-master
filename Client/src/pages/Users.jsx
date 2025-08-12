@@ -36,7 +36,7 @@ export default function Users() {
 
     useEffect(() => {
         const initializeData = async () => {
-            const userType = localStorage.getItem('userType');
+        const userType = localStorage.getItem('userType');
             if (userType !== 'Admin' && userType !== 'Teacher') {
                 navigate('/login');
                 return;
@@ -45,19 +45,19 @@ export default function Users() {
             // التحقق من صلاحية الـ token أولاً
             const isTokenValid = await checkTokenValidity();
             if (!isTokenValid) {
-                navigate('/login');
+            navigate('/login');
                 return;
             }
 
             const headers = getAuthHeaders();
             
             axios.get(`${API_BASE_URL}/api/users`, { headers })
-                .then(res => setUsers(res.data))
-                .catch(() => setUsers([]));
+            .then(res => setUsers(res.data))
+            .catch(() => setUsers([]));
                 
             axios.get(`${API_BASE_URL}/api/courses/all`, { headers })
-                .then(res => setCourses(res.data))
-                .catch(() => setCourses([]));
+            .then(res => setCourses(res.data))
+            .catch(() => setCourses([]));
         };
 
         initializeData();

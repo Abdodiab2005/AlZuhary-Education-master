@@ -48,13 +48,13 @@ export default function Index() {
             const headers = getAuthHeaders();
             if (Object.keys(headers).length > 0) {
                 axios.get(`${API_BASE_URL}/api/recharge/balance`, { headers })
-                .then(res => setBalance(res.data.credits || 0))
-                .catch(() => setBalance(0));
+            .then(res => setBalance(res.data.credits || 0))
+            .catch(() => setBalance(0));
                 
                 axios.get(`${API_BASE_URL}/api/auth/me`, { headers })
-                .then(res => setPurchasedCourses(res.data.purchasedCourses || []))
-                .catch(() => setPurchasedCourses([]));
-            }
+            .then(res => setPurchasedCourses(res.data.purchasedCourses || []))
+            .catch(() => setPurchasedCourses([]));
+        }
             
             // جلب الكورسات حسب نوع المستخدم
             const currentUserType = localStorage.getItem('userType');
@@ -63,15 +63,15 @@ export default function Index() {
                 : `${API_BASE_URL}/api/courses`;
                 
             axios.get(coursesEndpoint, { headers })
-                .then(res => {
-                    // التأكد من أن كل كورس يحتوي على الدروس
-                    const coursesWithLessons = res.data.map(course => ({
-                        ...course,
-                        lessons: course.lessons || []
-                    }));
-                    setCourses(coursesWithLessons);
+            .then(res => {
+                // التأكد من أن كل كورس يحتوي على الدروس
+                const coursesWithLessons = res.data.map(course => ({
+                    ...course,
+                    lessons: course.lessons || []
+                }));
+                setCourses(coursesWithLessons);
                     setLoading(false);
-                })
+            })
                 .catch((error) => {
                     console.error('Error fetching courses:', error);
                     setCourses([]);

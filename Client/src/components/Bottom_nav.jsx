@@ -123,7 +123,7 @@ export default function Bottom_nav() {
                     </Link>
                 )}
                 {(userType === 'Admin' || userType === 'Teacher') && (
-                    <Link to={'/adimn_set_test'}>
+                    <Link to={'/admin_set_test'}>
                         <button className="flex flex-col justify-center items-center gap-1">
                             <div className="nav-icons"><SiTestcafe /></div>
                             <span className="nav-btn">الامتحانات</span>

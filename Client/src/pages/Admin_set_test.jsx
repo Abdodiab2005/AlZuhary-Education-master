@@ -14,9 +14,25 @@ export default function Admin_set_test() {
 
     useEffect(() => {
         // جلب الكورسات عند تحميل الصفحة
-        axios.get(`${API_BASE_URL}/api/courses`)
+        const token = localStorage.getItem('token');
+        if (!token) {
+            alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+            window.location.href = '/login';
+            return;
+        }
+        
+        axios.get(`${API_BASE_URL}/api/courses`, {
+            headers: { Authorization: `Bearer ${token}` }
+        })
             .then(res => setCourses(res.data))
-            .catch(() => setCourses([]));
+            .catch(err => {
+                if (err.response?.status === 401 || err.response?.status === 403) {
+                    alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+                    window.location.href = '/login';
+                } else {
+                    setCourses([]);
+                }
+            });
     }, []);
 
     useEffect(() => {
@@ -34,8 +50,15 @@ export default function Admin_set_test() {
     useEffect(() => {
         // عند تغيير الكورس أو الدرس، جلب الامتحان الحالي (إن وجد)
         if (selectedCourse && selectedLesson) {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+                window.location.href = '/login';
+                return;
+            }
+            
             axios.get(`${API_BASE_URL}/api/exams/lesson/${selectedLesson}`, {
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                headers: { Authorization: `Bearer ${token}` }
             })
                 .then(res => {
                     if (Array.isArray(res.data) && res.data.length > 0) {
@@ -53,9 +76,14 @@ export default function Admin_set_test() {
                         setQuestions([]);
                     }
                 })
-                .catch(() => {
-                    setExamName('');
-                    setQuestions([]);
+                .catch(err => {
+                    if (err.response?.status === 401 || err.response?.status === 403) {
+                        alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+                        window.location.href = '/login';
+                    } else {
+                        setExamName('');
+                        setQuestions([]);
+                    }
                 });
         } else {
             setQuestions([]);
@@ -79,6 +107,15 @@ export default function Admin_set_test() {
                 return;
             }
         }
+        
+        // التحقق من وجود التوكن
+        const token = localStorage.getItem('token');
+        if (!token) {
+            alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+            window.location.href = '/login';
+            return;
+        }
+        
         // تجهيز البيانات
         const data = {
             name: examName,
@@ -91,14 +128,27 @@ export default function Admin_set_test() {
                 correctAnswerIndex: q.correctAnswerIndex
             }))
         };
-                    axios.post(`${API_BASE_URL}/api/exams`, data)
-            .then(res => {
-                alert('تم حفظ الامتحان بنجاح!');
-                // يمكنك إعادة تعيين الفورم هنا إذا أردت
-            })
-            .catch(err => {
-                alert('حدث خطأ أثناء حفظ الامتحان');
-            });
+        
+        axios.post(`${API_BASE_URL}/api/exams`, data, {
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        })
+        .then(res => {
+            alert('تم حفظ الامتحان بنجاح!');
+            // إعادة تعيين الفورم
+            setExamName('');
+            setQuestions([]);
+        })
+        .catch(err => {
+            if (err.response?.status === 401 || err.response?.status === 403) {
+                alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+                window.location.href = '/login';
+            } else {
+                alert('حدث خطأ أثناء حفظ الامتحان: ' + (err.response?.data?.message || err.message));
+            }
+        });
     }
 
     // أضف دالة إضافة سؤال:
@@ -176,12 +226,33 @@ export default function Admin_set_test() {
                                     id={`upload-img-${idx}`}
                                     onChange={async e => {
                                         if (e.target.files && e.target.files[0]) {
+                                            const token = localStorage.getItem('token');
+                                            if (!token) {
+                                                alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+                                                window.location.href = '/login';
+                                                return;
+                                            }
+                                            
                                             const formData = new FormData();
                                             formData.append('file', e.target.files[0]);
-                                            const res = await axios.post(`${API_BASE_URL}/api/files/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-                                            const newQuestions = [...questions];
-                                            newQuestions[idx].image = res.data.url;
-                                            setQuestions(newQuestions);
+                                            try {
+                                                const res = await axios.post(`${API_BASE_URL}/api/files/upload`, formData, { 
+                                                    headers: { 
+                                                        'Content-Type': 'multipart/form-data',
+                                                        'Authorization': `Bearer ${token}`
+                                                    } 
+                                                });
+                                                const newQuestions = [...questions];
+                                                newQuestions[idx].image = res.data.url;
+                                                setQuestions(newQuestions);
+                                            } catch (err) {
+                                                if (err.response?.status === 401 || err.response?.status === 403) {
+                                                    alert('انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى');
+                                                    window.location.href = '/login';
+                                                } else {
+                                                    alert('حدث خطأ أثناء رفع الصورة');
+                                                }
+                                            }
                                         }
                                     }}
                                 />

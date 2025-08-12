@@ -79,7 +79,7 @@ router.post('/signin', async (req, res) => {
     const token = jwt.sign(
       { userId: user._id, type: user.type },
       process.env.JWT_SECRET,
-      { expiresIn: '30d' } // زيادة مدة الصلاحية إلى 30 يوم
+      { expiresIn: '365d' } // زيادة مدة الصلاحية إلى سنة كاملة
     );
     
     res.json({ 
