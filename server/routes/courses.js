@@ -645,7 +645,7 @@ router.post('/:courseId/lessons/:lessonId/buy-views', authenticateToken, async (
   }
 });
 
-// التحقق من إمكانية الوصول للدرس بناءً على تفعيل الدرس
+// التحقق من إمكانية الوصول للدرس بناءً على تفعيل الدرس أو نجاح الامتحان
 router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
@@ -681,10 +681,26 @@ router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async
       });
     }
 
-    // إذا لم يكن مفعل، لا يمكن الوصول
+    // التحقق من نجاح امتحان الدرس نفسه (إذا لم يكن مفعل)
+    const examScore = user.examScores.find(score => 
+      score.lessonId && score.lessonId.toString() === lessonId
+    );
+    
+    if (examScore) {
+      const percentage = (examScore.score / examScore.total) * 100;
+      if (percentage >= 50) {
+        return res.json({ 
+          canAccess: true, 
+          reason: 'Exam passed',
+          examScore: percentage
+        });
+      }
+    }
+
+    // إذا لم يكن مفعل ولم ينجح في الامتحان، لا يمكن الوصول
     return res.json({ 
       canAccess: false, 
-      reason: 'Lesson not activated'
+      reason: 'Lesson not activated and exam not passed'
     });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
