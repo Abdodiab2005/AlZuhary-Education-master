@@ -214,6 +214,7 @@ export default function Course() {
                     canAccessLesson: false,
                     canTakeCurrentExam: false,
                     canTakePreviousExam: false,
+                    hasPreviousExam: false,
                     isFirstLesson: false
                 };
             }
@@ -736,7 +737,16 @@ export default function Course() {
                         : null;
                     
                     // منطق التفعيل المبسط
-                    const canAccess = lessonIndex === 0 ? true : (lessonStatuses[lesson._id]?.canAccessLesson || false);
+                    let canAccess = false;
+                    if (lessonIndex === 0) {
+                        // الدرس الأول متاح دائماً
+                        canAccess = true;
+                    } else {
+                        // للدروس الأخرى، نتحقق من وجود امتحان سابق
+                        // إذا لم يكن هناك امتحان سابق، نفتح الدرس مباشرة
+                        // إذا كان هناك امتحان سابق، نتحقق من نجاح الطالب
+                        canAccess = lessonStatuses[lesson._id]?.canAccessLesson || false;
+                    }
                     
                     const lessonUnlocked = courseUnlocked || (lessonActivation && (lessonActivation.video || lessonActivation.assignment)) || canAccess;
                     
@@ -753,9 +763,8 @@ export default function Course() {
 
                     
                     // منطق تفعيل زر امتحان الحصة السابقة
-                    let canTakePreviousExamBtn = false;
-                    // تفعيل زر امتحان الحصة السابقة إذا كان هناك امتحان "سابق" في نفس الدرس
-                    canTakePreviousExamBtn = lessonStatuses[lesson._id]?.canTakePreviousExam || false;
+                    let canTakePreviousExamBtn = true; // مفعل دائماً
+                    // إذا لم يكن هناك امتحان سابق، سيظهر رسالة "لا يوجد امتحان سابق لهذا الدرس"
                     
                     // منطق تفعيل زر امتحان الحصة الحالية
                     let canTakeCurrentExamBtn = false;
