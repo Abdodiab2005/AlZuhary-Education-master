@@ -37,6 +37,7 @@ export default function Course() {
     const [lessonViewCounts, setLessonViewCounts] = useState([]);
     const [forceUpdate, setForceUpdate] = useState(0);
     const [lessonStatuses, setLessonStatuses] = useState({});
+    const [viewInputs, setViewInputs] = useState({});
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -102,21 +103,21 @@ export default function Course() {
                 });
         }
         
-        // تحديث تلقائي كل 5 ثواني للتأكد من تحديث البيانات
+        // تحديث تلقائي كل 30 ثانية بدلاً من 5 ثواني لتقليل التحديثات
         const interval = setInterval(() => {
             const token = localStorage.getItem('token');
             if (token && courseId) {
                 refreshData();
             }
-        }, 5000);
+        }, 30000);
         
-        // تحديث إضافي بعد ثانيتين للتأكد من تحديث examScores
+        // تحديث إضافي بعد 5 ثواني بدلاً من ثانيتين
         setTimeout(() => {
             const token = localStorage.getItem('token');
             if (token && courseId) {
                 refreshData();
             }
-        }, 2000);
+        }, 5000);
         
         return () => clearInterval(interval);
     }, [courseId]);
@@ -509,7 +510,6 @@ export default function Course() {
             setEditLesson(null);
             setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10 });
         } catch (err) {
-            console.error('Error editing lesson:', err);
             window.alert('حدث خطأ أثناء تعديل الدرس');
         }
     }, [courseId, editLesson, editForm]);
@@ -527,7 +527,6 @@ export default function Course() {
                 });
                 setLessons(prev => prev.filter(l => l._id !== lessonId));
             } catch (err) {
-                console.error('Error deleting lesson:', err);
                 window.alert('حدث خطأ أثناء حذف الدرس');
             }
         }
@@ -629,7 +628,6 @@ export default function Course() {
                 window.alert('لا يوجد امتحان حالي لهذا الدرس');
             }
         } catch (error) {
-            console.error('خطأ في جلب الامتحان:', error);
             window.alert('حدث خطأ في جلب الامتحان');
         }
     }, [navigate]);
@@ -655,45 +653,44 @@ export default function Course() {
                 window.alert('لا يوجد امتحان سابق لهذا الدرس');
             }
         } catch (error) {
-            console.error('خطأ في جلب الامتحان السابق:', error);
             window.alert('حدث خطأ في جلب الامتحان');
         }
     }, [navigate]);
 
     // تحديث البيانات من الخادم
     const refreshData = useCallback(async () => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            try {
-                const userRes = await axios.get(`${API_BASE_URL}/api/auth/me`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setWatchedLessons(userRes.data.watchedLessons?.map(l => l.lessonId) || []);
-                setExamScores(userRes.data.examScores || []);
-                setLessonViewCounts(userRes.data.lessonViewCounts || []);
-                setBalance(userRes.data.credits || 0);
-
-                const balanceRes = await axios.get(`${API_BASE_URL}/api/recharge/balance`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setBalance(balanceRes.data.credits || 0);
-
-                // إعادة تحميل البيانات مرة أخرى بعد ثانية للتأكد
-                setTimeout(async () => {
-                    const finalUserRes = await axios.get(`${API_BASE_URL}/api/auth/me`, {
+        // منع التحديثات المتكررة
+        if (refreshData.isUpdating) return;
+        refreshData.isUpdating = true;
+        
+        try {
+            const token = localStorage.getItem('token');
+            if (token) {
+                try {
+                    const userRes = await axios.get(`${API_BASE_URL}/api/auth/me`, {
                         headers: { Authorization: `Bearer ${token}` }
                     });
-                    setWatchedLessons(finalUserRes.data.watchedLessons?.map(l => l.lessonId) || []);
-                    setExamScores(finalUserRes.data.examScores || []);
-                    setLessonViewCounts(finalUserRes.data.lessonViewCounts || []);
-                    setBalance(finalUserRes.data.credits || 0);
+                    setWatchedLessons(userRes.data.watchedLessons?.map(l => l.lessonId) || []);
+                    setExamScores(userRes.data.examScores || []);
+                    setLessonViewCounts(userRes.data.lessonViewCounts || []);
+                    setBalance(userRes.data.credits || 0);
+
+                    const balanceRes = await axios.get(`${API_BASE_URL}/api/recharge/balance`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    setBalance(balanceRes.data.credits || 0);
+
+                    // تحديث فوري بدون تأخير إضافي
                     setForceUpdate(prev => prev + 1);
                     
                     // تحديث حالة الدروس
                     updateLessonStatuses();
-                }, 1000);
-            } catch (err) {
+                } catch (err) {
+                    // تجاهل الأخطاء
+                }
             }
+        } finally {
+            refreshData.isUpdating = false;
         }
     }, [updateLessonStatuses]);
 
@@ -712,15 +709,21 @@ export default function Course() {
                     
                     // تحديث حالة الدروس بعد تحديث examScores
                     if (lessons.length > 0) {
-                        setTimeout(() => {
-                            updateLessonStatuses();
-                        }, 100);
+                        updateLessonStatuses();
                     }
                 })
                 .catch(err => {
                 });
         }
     }, [lessonViewCounts, forceUpdate, lessons, updateLessonStatuses]);
+
+    // تحديث قيمة حقل الإدخال
+    const handleViewInputChange = useCallback((lessonId, value) => {
+        setViewInputs(prev => ({
+            ...prev,
+            [lessonId]: value
+        }));
+    }, []);
 
     // شراء مرات مشاهدة إضافية
     const handleBuyViews = useCallback(async (lessonId, numberOfViews) => {
@@ -734,14 +737,8 @@ export default function Course() {
             if (res.data.success) {
                 window.alert(res.data.message);
 
-                // تحديث البيانات من الخادم
+                // تحديث البيانات من الخادم مرة واحدة فقط
                 await refreshData();
-
-                // إعادة تحميل البيانات مرة أخرى بعد ثانية للتأكد
-                setTimeout(async () => {
-                    await refreshData();
-                    setForceUpdate(prev => prev + 1);
-                }, 2000);
             }
         } catch (err) {
             if (err.response?.data?.message) {
@@ -766,7 +763,6 @@ export default function Course() {
                 const lessonExamsResponse = await axios.get(`${API_BASE_URL}/api/exams/test-lesson-exams/${lesson._id}`);
             }
         } catch (error) {
-            console.error('خطأ في اختبار الامتحانات:', error);
         }
     }, [lessons]);
 
@@ -882,45 +878,27 @@ export default function Course() {
                                             // التحقق من إمكانية الوصول للدرس
                                             let canAccess = false;
                                             
-                                            // إضافة رسائل تصحيح مفصلة
-                                            console.log(`=== معلومات الدرس ${lessonIndex + 1} ===`);
-                                            console.log(`عنوان الدرس: ${lesson.title}`);
-                                            console.log(`ID الدرس: ${lesson._id}`);
-                                            console.log(`examScores الكاملة:`, examScores);
-                                            console.log(`عدد نتائج الامتحانات: ${examScores.length}`);
+                                                                                         // التحقق من إمكانية الوصول للدرس
                                             
-                                            if (lessonIndex === 0) {
-                                                // الدرس الأول متاح دائماً
-                                                canAccess = true;
-                                                console.log(`الدرس الأول - متاح دائماً`);
-                                            } else {
-                                                // للدروس الأخرى، نتحقق من نجاح امتحان الدرس نفسه (السابق)
-                                                const currentLessonId = lesson._id;
-                                                if (currentLessonId) {
-                                                    // البحث في examScores
-                                                    const examScore = examScores.find(score => {
-                                                        console.log(`فحص score:`, score);
-                                                        console.log(`نوع score:`, typeof score);
-                                                        console.log(`score.lessonId:`, score?.lessonId);
-                                                        console.log(`currentLessonId:`, currentLessonId);
-                                                        console.log(`هل متطابق؟:`, score?.lessonId?.toString() === currentLessonId.toString());
-                                                        
-                                                        if (typeof score === 'object' && score.lessonId) {
-                                                            return score.lessonId.toString() === currentLessonId.toString();
-                                                        }
-                                                        return false;
-                                                    });
+                                                                                         if (lessonIndex === 0) {
+                                                 // الدرس الأول متاح دائماً
+                                                 canAccess = true;
+                                             } else {
+                                                                                                 // للدروس الأخرى، نتحقق من نجاح امتحان الدرس نفسه (السابق)
+                                                 const currentLessonId = lesson._id;
+                                                 if (currentLessonId) {
+                                                     // البحث في examScores
+                                                     const examScore = examScores.find(score => {
+                                                         if (typeof score === 'object' && score.lessonId) {
+                                                             return score.lessonId.toString() === currentLessonId.toString();
+                                                         }
+                                                         return false;
+                                                     });
                                                     
-                                                    // حساب النسبة المئوية
-                                                    const percentage = examScore ? (examScore.score / examScore.total) * 100 : 0;
-                                                    canAccess = examScore && percentage >= 50;
-                                                    
-                                                    console.log(`نتيجة امتحان الدرس:`, examScore);
-                                                    console.log(`الدرجة المطلقة: ${examScore?.score}/${examScore?.total}`);
-                                                    console.log(`النسبة المئوية: ${percentage.toFixed(1)}%`);
-                                                    console.log(`هل نجح؟ (>=50%): ${percentage >= 50}`);
-                                                    console.log(`يمكن الوصول: ${canAccess}`);
-                                                }
+                                                                                                         // حساب النسبة المئوية
+                                                     const percentage = examScore ? (examScore.score / examScore.total) * 100 : 0;
+                                                     canAccess = examScore && percentage >= 50;
+                                                 }
                                             }
                                             
                                             // إذا كان يمكن الوصول للدرس، نعرض زر الدخول
@@ -947,19 +925,21 @@ export default function Course() {
                                                                     سعر المرة: {lesson.viewPrice || 10} جنيه
                                                                 </span>
                                                                 <div className='flex items-center gap-1'>
-                                                                    <input 
+                                                                                                                                                                                                             <input 
                                                                         type="number" 
                                                                         min="1" 
                                                                         max="10"
-                                                                        defaultValue="1"
-                                                                        className='w-12 h-6 text-center border rounded'
-                                                                        id={`views-${lesson._id}`}
+                                                                        value={viewInputs[lesson._id] || 1}
+                                                                        onChange={(e) => handleViewInputChange(lesson._id, e.target.value)}
+                                                                        className='w-16 h-8 text-center border rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-500'
+                                                                        key={`input-${lesson._id}`}
+                                                                        autoComplete="off"
+                                                                        inputMode="numeric"
                                                                     />
                                                                     <button 
                                                                         className='bg-orange-500 text-white text-xs px-2 py-1 rounded hover:bg-orange-600'
                                                                         onClick={() => {
-                                                                            const input = document.getElementById(`views-${lesson._id}`);
-                                                                            const numberOfViews = parseInt(input.value) || 1;
+                                                                            const numberOfViews = parseInt(viewInputs[lesson._id]) || 1;
                                                                             if (numberOfViews > 0 && numberOfViews <= 10) {
                                                                                 handleBuyViews(lesson._id, numberOfViews);
                                                                             } else {
@@ -977,7 +957,6 @@ export default function Course() {
                                             }
                                             
                                             // إذا لم يكن يمكن الوصول للدرس، لا نعرض شيئاً
-                                            console.log(`الدرس ${lesson.title} - لا يمكن الوصول له`);
                                             return null;
                                         })()}
                                     </>
