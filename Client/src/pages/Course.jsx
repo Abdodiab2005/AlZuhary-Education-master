@@ -742,10 +742,24 @@ export default function Course() {
                         // الدرس الأول متاح دائماً
                         canAccess = true;
                     } else {
-                        // للدروس الأخرى، نتحقق من وجود امتحان سابق
-                        // إذا لم يكن هناك امتحان سابق، نفتح الدرس مباشرة
-                        // إذا كان هناك امتحان سابق، نتحقق من نجاح الطالب
-                        canAccess = lessonStatuses[lesson._id]?.canAccessLesson || false;
+                        // للدروس الأخرى، نتحقق من نجاح امتحان الدرس السابق
+                        const previousLessonId = lessons[lessonIndex - 1]?._id;
+                        if (previousLessonId) {
+                            // البحث عن نتيجة امتحان الدرس السابق
+                            const previousExamScore = examScores.find(score => 
+                                score.lessonId === previousLessonId
+                            );
+                            
+                            if (previousExamScore) {
+                                // إذا كان هناك امتحان سابق، نتحقق من النتيجة
+                                canAccess = previousExamScore.score >= 50; // نجاح بنسبة 50%+
+                            } else {
+                                // إذا لم يكن هناك امتحان سابق، نفتح الدرس مباشرة
+                                canAccess = true;
+                            }
+                        } else {
+                            canAccess = true;
+                        }
                     }
                     
                     const lessonUnlocked = courseUnlocked || (lessonActivation && (lessonActivation.video || lessonActivation.assignment)) || canAccess;
