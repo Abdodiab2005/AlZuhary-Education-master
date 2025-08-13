@@ -164,7 +164,7 @@ router.put('/:examId', authenticateToken, async (req, res) => {
         
         // التحقق من أن المستخدم هو Admin أو Teacher
         const user = await User.findById(req.user.userId);
-        if (!user || (user.userType !== 'Admin' && user.userType !== 'Teacher')) {
+        if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
             return res.status(403).json({ message: 'غير مصرح لك بتحديث الامتحانات' });
         }
         
@@ -214,7 +214,7 @@ router.delete('/:examId', authenticateToken, async (req, res) => {
         
         // التحقق من أن المستخدم هو Admin أو Teacher
         const user = await User.findById(req.user.userId);
-        if (!user || (user.userType !== 'Admin' && user.userType !== 'Teacher')) {
+        if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
             return res.status(403).json({ message: 'غير مصرح لك بحذف الامتحانات' });
         }
         
@@ -231,6 +231,68 @@ router.delete('/:examId', authenticateToken, async (req, res) => {
             message: 'خطأ في حذف الامتحان', 
             error: err.message 
         });
+    }
+});
+
+// API للتحقق من إمكانية الوصول للدرس
+router.get('/can-access-lesson/:courseId/:lessonId', authenticateToken, async (req, res) => {
+    try {
+        const { courseId, lessonId } = req.params;
+        const userId = req.user.userId;
+
+        // جلب المستخدم
+        const user = await User.findById(userId);
+        if (!user) return res.status(404).json({ message: 'المستخدم غير موجود' });
+
+        // جلب الكورس
+        const course = await Course.findById(courseId);
+        if (!course) return res.status(404).json({ message: 'الكورس غير موجود' });
+
+        // البحث عن الدرس
+        const lesson = course.lessons.find(l => l._id.toString() === lessonId);
+        if (!lesson) return res.status(404).json({ message: 'الدرس غير موجود' });
+
+        // تحديد موقع الدرس في الكورس
+        const currentLessonIndex = course.lessons.findIndex(l => l._id.toString() === lessonId);
+        const previousLesson = currentLessonIndex > 0 ? course.lessons[currentLessonIndex - 1] : null;
+        const previousLessonId = previousLesson ? previousLesson._id : null;
+
+        // التحقق من شراء الكورس
+        const courseUnlocked = user.purchasedCourses.includes(courseId);
+
+        // التحقق من شراء الدرس
+        const lessonActivation = user.purchasedLessons.find(l => 
+            l.lessonId && l.lessonId.toString() === lessonId
+        );
+
+        // التحقق من إمكانية الوصول للدرس
+        let canAccess = false;
+        if (currentLessonIndex === 0) {
+            // الدرس الأول متاح دائماً
+            canAccess = true;
+        } else if (courseUnlocked) {
+            canAccess = true;
+        } else if (lessonActivation) {
+            canAccess = true;
+        } else if (previousLessonId) {
+            // التحقق من نجاح امتحان الدرس السابق
+            const previousExamScore = user.examScores.find(score => 
+                score.lessonId.toString() === previousLessonId.toString() && score.passed
+            );
+            canAccess = !!previousExamScore;
+        }
+
+        res.json({
+            canAccess,
+            courseUnlocked,
+            lessonActivation: !!lessonActivation,
+            isFirstLesson: currentLessonIndex === 0,
+            previousLessonId: previousLessonId ? previousLessonId.toString() : null
+        });
+
+    } catch (err) {
+        console.error('Error in can-access-lesson:', err);
+        res.status(500).json({ message: 'Server error', error: err.message });
     }
 });
 

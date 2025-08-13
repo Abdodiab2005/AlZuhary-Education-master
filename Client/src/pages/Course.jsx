@@ -104,6 +104,7 @@ export default function Course() {
         
         // تحديث تلقائي كل 5 ثواني للتأكد من تحديث البيانات
         const interval = setInterval(() => {
+            const token = localStorage.getItem('token');
             if (token && courseId) {
                 refreshData();
             }
@@ -120,7 +121,7 @@ export default function Course() {
                 const statuses = {};
                 for (const lesson of lessons) {
                     try {
-                        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lesson._id}/status`, {
+                        const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/lesson-status/${lesson._id}`, {
                             headers: { Authorization: `Bearer ${token}` }
                         });
                         statuses[lesson._id] = response.data;
@@ -156,7 +157,7 @@ export default function Course() {
                         const statuses = {};
                         for (const lesson of lessons) {
                             try {
-                                const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lesson._id}/status`, {
+                                const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/lesson-status/${lesson._id}`, {
                                     headers: { Authorization: `Bearer ${token}` }
                                 });
                                 statuses[lesson._id] = response.data;
@@ -746,13 +747,37 @@ export default function Course() {
                         const previousLessonId = lessons[lessonIndex - 1]?._id;
                         if (previousLessonId) {
                             // البحث عن نتيجة امتحان الدرس السابق
-                            const previousExamScore = examScores.find(score => 
-                                score.lessonId === previousLessonId
-                            );
+                            const previousExamScore = examScores.find(score => {
+                                // التحقق من أن score هو كائن أو قيمة مباشرة
+                                if (typeof score === 'object' && score.lessonId) {
+                                    return score.lessonId.toString() === previousLessonId.toString();
+                                } else if (typeof score === 'string') {
+                                    return score.toString() === previousLessonId.toString();
+                                }
+                                return false;
+                            });
                             
                             if (previousExamScore) {
                                 // إذا كان هناك امتحان سابق، نتحقق من النتيجة
-                                canAccess = previousExamScore.score >= 50; // نجاح بنسبة 50%+
+                                let score = 0;
+                                if (typeof previousExamScore === 'object' && previousExamScore.score !== undefined) {
+                                    score = previousExamScore.score;
+                                } else if (typeof previousExamScore === 'number') {
+                                    score = previousExamScore;
+                                }
+                                canAccess = score >= 50; // نجاح بنسبة 50%+
+                                
+                                // تشخيص: طباعة معلومات الدرس والامتحان
+                                if (lesson.title === 'الدرس الثاني' || lesson.title.includes('ثاني')) {
+                                    console.log('🔍 تشخيص الدرس الثاني:', {
+                                        lessonId: lesson._id,
+                                        previousLessonId,
+                                        examScores,
+                                        previousExamScore,
+                                        score,
+                                        canAccess
+                                    });
+                                }
                             } else {
                                 // إذا لم يكن هناك امتحان سابق، نفتح الدرس مباشرة
                                 canAccess = true;
