@@ -103,21 +103,13 @@ export default function Course() {
                 });
         }
         
-        // تحديث تلقائي كل 30 ثانية بدلاً من 5 ثواني لتقليل التحديثات
+        // تحديث تلقائي كل دقيقة واحدة فقط
         const interval = setInterval(() => {
             const token = localStorage.getItem('token');
             if (token && courseId) {
                 refreshData();
             }
-        }, 30000);
-        
-        // تحديث إضافي بعد 5 ثواني بدلاً من ثانيتين
-        setTimeout(() => {
-            const token = localStorage.getItem('token');
-            if (token && courseId) {
-                refreshData();
-            }
-        }, 5000);
+        }, 60000);
         
         return () => clearInterval(interval);
     }, [courseId]);
@@ -214,14 +206,7 @@ export default function Course() {
         }
     }, [location.pathname]);
 
-    // تحديث تلقائي عند تغيير حالة الدروس
-    useEffect(() => {
-        // إعادة حساب حالة الوصول للدروس عند تغيير lessonStatuses
-        if (Object.keys(lessonStatuses).length > 0) {
-            // هذا سيؤدي إلى إعادة حساب canAccessLesson تلقائيًا
-            setForceUpdate(prev => prev + 1);
-        }
-    }, [lessonStatuses]);
+
 
     // تحديث تلقائي عند تغيير نتائج الامتحانات
     useEffect(() => {
@@ -269,10 +254,7 @@ export default function Course() {
         }
     }, [examScores, lessons, courseId]);
 
-    // إعادة رندر عند تغيير lessonStatuses
-    useEffect(() => {
-        setForceUpdate(prev => prev + 1);
-    }, [lessonStatuses]);
+
 
     // تحديث البيانات عند العودة من صفحة الفيديو
     useEffect(() => {
@@ -680,11 +662,8 @@ export default function Course() {
                     });
                     setBalance(balanceRes.data.credits || 0);
 
-                    // تحديث فوري بدون تأخير إضافي
-                    setForceUpdate(prev => prev + 1);
-                    
-                    // تحديث حالة الدروس
-                    updateLessonStatuses();
+                                         // تحديث حالة الدروس
+                     updateLessonStatuses();
                 } catch (err) {
                     // تجاهل الأخطاء
                 }
@@ -707,15 +686,15 @@ export default function Course() {
                     setLessonViewCounts(res.data.lessonViewCounts || []);
                     setBalance(res.data.credits || 0);
                     
-                    // تحديث حالة الدروس بعد تحديث examScores
-                    if (lessons.length > 0) {
-                        updateLessonStatuses();
-                    }
-                })
-                .catch(err => {
-                });
-        }
-    }, [lessonViewCounts, forceUpdate, lessons, updateLessonStatuses]);
+                                         // تحديث حالة الدروس بعد تحديث examScores
+                     if (lessons.length > 0) {
+                         updateLessonStatuses();
+                     }
+                 })
+                 .catch(err => {
+                 });
+         }
+     }, [lessonViewCounts, lessons, updateLessonStatuses]);
 
     // تحديث قيمة حقل الإدخال
     const handleViewInputChange = useCallback((lessonId, value) => {
@@ -823,8 +802,8 @@ export default function Course() {
                         })
                         : null;
                     
-                                        // إضافة forceUpdate لضمان تحديث الأزرار
-                    const key = `${lesson._id}-${forceUpdate}`;
+                                                             // مفتاح فريد لكل درس
+                     const key = `${lesson._id}`;
                     
                     // منطق إظهار الفيديو والواجب
                     const showVideo = lesson.videoUrl;
@@ -929,17 +908,20 @@ export default function Course() {
                                                                         type="number" 
                                                                         min="1" 
                                                                         max="10"
-                                                                        value={viewInputs[lesson._id] || 1}
+                                                                        value={viewInputs[lesson._id] || ''}
                                                                         onChange={(e) => handleViewInputChange(lesson._id, e.target.value)}
+                                                                        onFocus={(e) => e.target.select()}
                                                                         className='w-16 h-8 text-center border rounded text-sm focus:outline-none focus:ring-2 focus:ring-orange-500'
                                                                         key={`input-${lesson._id}`}
                                                                         autoComplete="off"
                                                                         inputMode="numeric"
+                                                                        placeholder="1"
                                                                     />
                                                                     <button 
                                                                         className='bg-orange-500 text-white text-xs px-2 py-1 rounded hover:bg-orange-600'
                                                                         onClick={() => {
-                                                                            const numberOfViews = parseInt(viewInputs[lesson._id]) || 1;
+                                                                            const inputValue = viewInputs[lesson._id];
+                                                                            const numberOfViews = inputValue === '' ? 1 : parseInt(inputValue) || 1;
                                                                             if (numberOfViews > 0 && numberOfViews <= 10) {
                                                                                 handleBuyViews(lesson._id, numberOfViews);
                                                                             } else {
