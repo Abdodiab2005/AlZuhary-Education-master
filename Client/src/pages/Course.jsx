@@ -110,13 +110,21 @@ export default function Course() {
             }
         }, 5000);
         
+        // تحديث إضافي بعد ثانيتين للتأكد من تحديث examScores
+        setTimeout(() => {
+            const token = localStorage.getItem('token');
+            if (token && courseId) {
+                refreshData();
+            }
+        }, 2000);
+        
         return () => clearInterval(interval);
     }, [courseId]);
 
     // تحديث حالة الدروس عند تغيير نتائج الامتحانات
     useEffect(() => {
         const token = localStorage.getItem('token');
-        if (token && lessons.length > 0 && examScores.length > 0) {
+        if (token && lessons.length > 0) {
             const fetchUpdatedStatuses = async () => {
                 const statuses = {};
                 for (const lesson of lessons) {
@@ -126,6 +134,22 @@ export default function Course() {
                         });
                         statuses[lesson._id] = response.data;
                     } catch (err) {
+                        // في حالة الخطأ، نستخدم المنطق المحلي
+                        const lessonIndex = lessons.findIndex(l => l._id === lesson._id);
+                        if (lessonIndex === 0) {
+                            statuses[lesson._id] = { canAccessLesson: true };
+                        } else {
+                            const previousLessonId = lessons[lessonIndex - 1]?._id;
+                            if (previousLessonId) {
+                                const previousExamScore = examScores.find(score => 
+                                    score.lessonId && score.lessonId.toString() === previousLessonId.toString()
+                                );
+                                const canAccess = previousExamScore ? previousExamScore.score >= 50 : true;
+                                statuses[lesson._id] = { canAccessLesson: canAccess };
+                            } else {
+                                statuses[lesson._id] = { canAccessLesson: true };
+                            }
+                        }
                     }
                 }
                 setLessonStatuses(statuses);
@@ -134,7 +158,7 @@ export default function Course() {
             const timeoutId = setTimeout(fetchUpdatedStatuses, 500);
             return () => clearTimeout(timeoutId);
         }
-    }, [examScores]);
+    }, [examScores, lessons, courseId]);
 
     // تحديث البيانات عند العودة من الامتحان
     useEffect(() => {
@@ -151,6 +175,20 @@ export default function Course() {
                     setWatchedLessons(userRes.data.watchedLessons?.map(l => l.lessonId) || []);
                     setExamScores(userRes.data.examScores || []);
                     setLessonViewCounts(userRes.data.lessonViewCounts || []);
+                    
+                    // تحديث حالة الدروس بعد تحديث examScores
+                    setTimeout(() => {
+                        if (lessons.length > 0) {
+                            updateLessonStatuses();
+                        }
+                    }, 200);
+                    
+                    // تحديث إضافي بعد ثانية للتأكد من تحديث البيانات
+                    setTimeout(() => {
+                        if (lessons.length > 0) {
+                            updateLessonStatuses();
+                        }
+                    }, 1000);
                     
                     // تحديث حالة الدروس
                     if (lessons.length > 0) {
@@ -225,7 +263,9 @@ export default function Course() {
 
     // تحديث lessonStatuses عند تغيير examScores
     useEffect(() => {
-        updateLessonStatuses();
+        if (examScores.length > 0 && lessons.length > 0) {
+            updateLessonStatuses();
+        }
     }, [examScores, lessons, courseId]);
 
     // إعادة رندر عند تغيير lessonStatuses
@@ -277,6 +317,22 @@ export default function Course() {
                         });
                         statuses[lesson._id] = response.data;
                     } catch (err) {
+                        // في حالة الخطأ، نستخدم المنطق المحلي
+                        const lessonIndex = lessons.findIndex(l => l._id === lesson._id);
+                        if (lessonIndex === 0) {
+                            statuses[lesson._id] = { canAccessLesson: true };
+                        } else {
+                            const previousLessonId = lessons[lessonIndex - 1]?._id;
+                            if (previousLessonId) {
+                                const previousExamScore = examScores.find(score => 
+                                    score.lessonId && score.lessonId.toString() === previousLessonId.toString()
+                                );
+                                const canAccess = previousExamScore ? previousExamScore.score >= 50 : true;
+                                statuses[lesson._id] = { canAccessLesson: canAccess };
+                            } else {
+                                statuses[lesson._id] = { canAccessLesson: true };
+                            }
+                        }
                     }
                 }
                 setLessonStatuses(statuses);
@@ -284,7 +340,7 @@ export default function Course() {
             // تحديث فوري عند العودة من الامتحان
             fetchUpdatedStatuses();
         }
-    }, [location.pathname, lessons, courseId]);
+    }, [location.pathname, lessons, courseId, examScores]);
 
     const handleAddLesson = useCallback(async (e) => {
         e.preventDefault();
@@ -626,11 +682,18 @@ export default function Course() {
                     setExamScores(res.data.examScores || []);
                     setLessonViewCounts(res.data.lessonViewCounts || []);
                     setBalance(res.data.credits || 0);
+                    
+                    // تحديث حالة الدروس بعد تحديث examScores
+                    if (lessons.length > 0) {
+                        setTimeout(() => {
+                            updateLessonStatuses();
+                        }, 100);
+                    }
                 })
                 .catch(err => {
                 });
         }
-    }, [lessonViewCounts, forceUpdate]);
+    }, [lessonViewCounts, forceUpdate, lessons, updateLessonStatuses]);
 
     // شراء مرات مشاهدة إضافية
     const handleBuyViews = useCallback(async (lessonId, numberOfViews) => {
@@ -746,13 +809,11 @@ export default function Course() {
                         // للدروس الأخرى، نتحقق من نجاح امتحان الدرس السابق
                         const previousLessonId = lessons[lessonIndex - 1]?._id;
                         if (previousLessonId) {
-                            // البحث عن نتيجة امتحان الدرس السابق
+                            // البحث عن نتيجة امتحان الدرس السابق في examScores
                             const previousExamScore = examScores.find(score => {
-                                // التحقق من أن score هو كائن أو قيمة مباشرة
+                                // التحقق من أن score هو كائن يحتوي على lessonId
                                 if (typeof score === 'object' && score.lessonId) {
                                     return score.lessonId.toString() === previousLessonId.toString();
-                                } else if (typeof score === 'string') {
-                                    return score.toString() === previousLessonId.toString();
                                 }
                                 return false;
                             });
@@ -762,20 +823,20 @@ export default function Course() {
                                 let score = 0;
                                 if (typeof previousExamScore === 'object' && previousExamScore.score !== undefined) {
                                     score = previousExamScore.score;
-                                } else if (typeof previousExamScore === 'number') {
-                                    score = previousExamScore;
                                 }
                                 canAccess = score >= 50; // نجاح بنسبة 50%+
                                 
-                                // تشخيص: طباعة معلومات الدرس والامتحان
-                                if (lesson.title === 'الدرس الثاني' || lesson.title.includes('ثاني')) {
-                                    console.log('🔍 تشخيص الدرس الثاني:', {
+                                // إضافة تشخيص مؤقت للمساعدة في تحديد المشكلة
+                                if (lesson.title && (lesson.title.includes('ثاني') || lesson.title.includes('2'))) {
+                                    console.log('🔍 تشخيص الدرس:', {
+                                        lessonTitle: lesson.title,
                                         lessonId: lesson._id,
                                         previousLessonId,
-                                        examScores,
+                                        examScoresLength: examScores.length,
                                         previousExamScore,
                                         score,
-                                        canAccess
+                                        canAccess,
+                                        examScores: examScores
                                     });
                                 }
                             } else {
@@ -879,10 +940,10 @@ export default function Course() {
                                                                 setExamScores(res.data.examScores || []);
                                                                 setLessonViewCounts(res.data.lessonViewCounts || []);
                                                                 
-                                                                                    // تحديث حالة الامتحانات بعد مشاهدة الدرس
-                    if (lessons.length > 0) {
-                        updateLessonStatuses();
-                    }
+                                                                // تحديث حالة الامتحانات بعد مشاهدة الدرس
+                                                                if (lessons.length > 0) {
+                                                                    updateLessonStatuses();
+                                                                }
                                                             })
                                                             .catch(err => {
                                                             });

@@ -26,7 +26,8 @@ export default function Student_test() {
         // إذا كان الامتحان موجود في location state
         if (location.state?.exam) {
             setExam(location.state.exam);
-            setLoading(false);
+            // التحقق من حالة الامتحان
+            checkExamStatus(location.state.exam._id);
         } else if (lessonId) {
             // جلب الامتحان من الباك إند
             fetchExam();
@@ -34,6 +35,33 @@ export default function Student_test() {
             setLoading(false);
         }
     }, [lessonId, location.state, navigate]);
+
+    const checkExamStatus = async (examId) => {
+        try {
+            const token = localStorage.getItem('token');
+            const userResponse = await axios.get(`${API_BASE_URL}/api/auth/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            const userData = userResponse.data;
+            const examScore = userData.examScores?.find(score => score.examId === examId);
+            
+            if (examScore) {
+                // إذا كان الامتحان مأخوذ مسبقاً، اعرض النتيجة
+                setScore({
+                    score: examScore.score,
+                    total: examScore.total,
+                    percentage: Math.round((examScore.score / examScore.total) * 100),
+                    passed: examScore.passed
+                });
+                setIsSubmitted(true);
+            }
+        } catch (error) {
+            // تجاهل الأخطاء في التحقق من الحالة
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const fetchExam = async () => {
         try {
@@ -45,10 +73,16 @@ export default function Student_test() {
             
             // البحث عن امتحان current (حالي) أولاً
             if (response.data && response.data.organized && response.data.organized.current) {
-                setExam(response.data.organized.current);
+                const examData = response.data.organized.current;
+                setExam(examData);
+                // التحقق من حالة الامتحان
+                await checkExamStatus(examData._id);
             } else if (response.data && response.data.all && response.data.all.length > 0) {
                 // إذا لم يكن هناك امتحان current، خذ أول امتحان
-                setExam(response.data.all[0]);
+                const examData = response.data.all[0];
+                setExam(examData);
+                // التحقق من حالة الامتحان
+                await checkExamStatus(examData._id);
             } else {
                 alert('لا يوجد امتحان لهذا الدرس');
                 navigate(-1);
@@ -91,7 +125,22 @@ export default function Student_test() {
                 localStorage.setItem('userData', JSON.stringify(userResponse.data));
             }
         } catch (error) {
-            alert('حدث خطأ في إرسال الامتحان');
+            if (error.response?.status === 400 && error.response?.data?.message) {
+                // إذا كان الخطأ 400، اعرض الرسالة المحددة من السيرفر
+                if (error.response.data.message === 'لقد أخذت هذا الامتحان من قبل') {
+                    // إذا كان الامتحان مأخوذ مسبقاً، اعرض النتيجة السابقة
+                    setScore(error.response.data.previousScore);
+                    setIsSubmitted(true);
+                    alert('لقد أخذت هذا الامتحان من قبل. النتيجة السابقة: ' + 
+                          error.response.data.previousScore.score + '/' + 
+                          error.response.data.previousScore.total + 
+                          ' (' + error.response.data.previousScore.percentage + '%)');
+                } else {
+                    alert(error.response.data.message);
+                }
+            } else {
+                alert('حدث خطأ في إرسال الامتحان');
+            }
         }
     };
 
