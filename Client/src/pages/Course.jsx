@@ -39,6 +39,9 @@ export default function Course() {
     const [lessonStatuses, setLessonStatuses] = useState({});
     const [viewInputs, setViewInputs] = useState({});
 
+    // فحص courseId
+    console.log('courseId من useParams:', courseId);
+
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (!token) {
@@ -498,18 +501,53 @@ export default function Course() {
 
     const handleDeleteLesson = useCallback(async (lessonId) => {
         const token = localStorage.getItem('token');
+        if (!token) {
+            window.alert('يجب تسجيل الدخول أولاً');
+            return;
+        }
         if (!courseId) {
             window.alert('معرف الكورس غير موجود');
             return;
         }
+        if (!lessonId) {
+            window.alert('معرف الدرس غير موجود');
+            return;
+        }
+        
         if (window.confirm('هل أنت متأكد من حذف هذا الدرس؟')) {
             try {
-                await axios.delete(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`, {
+                console.log('محاولة حذف الدرس:', { courseId, lessonId });
+                
+                const response = await axios.delete(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                setLessons(prev => prev.filter(l => l._id !== lessonId));
+                
+                console.log('استجابة الحذف:', response);
+                
+                if (response.status === 200) {
+                    // إزالة الدرس من القائمة
+                    setLessons(prev => {
+                        const newLessons = prev.filter(l => l._id !== lessonId);
+                        console.log('الدروس بعد الحذف:', newLessons);
+                        return newLessons;
+                    });
+                    
+                    // إغلاق modal التعديل
+                    setEditLesson(null);
+                    // إعادة تعيين نموذج التعديل
+                    setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10 });
+                    
+                    window.alert('تم حذف الدرس بنجاح!');
+                }
             } catch (err) {
-                window.alert('حدث خطأ أثناء حذف الدرس');
+                console.error('خطأ في حذف الدرس:', err);
+                if (err.response?.status === 404) {
+                    window.alert('الدرس غير موجود');
+                } else if (err.response?.status === 403) {
+                    window.alert('ليس لديك صلاحية لحذف هذا الدرس');
+                } else {
+                    window.alert(`حدث خطأ أثناء حذف الدرس: ${err.message}`);
+                }
             }
         }
     }, [courseId]);
@@ -834,10 +872,10 @@ export default function Course() {
                                 ) : (
                                     <img src={course_poster} className='rounded-t-2xl w-full h-full lg:rounded-[0] lg:rounded-l-2xl' alt='' />
                                 )}
-                                {/* Edit Lesson Data */}
-                                {(userType === 'Admin' || userType === 'Teacher') && (
-                                    <button className='absolute top-1 right-2 p-2 rounded-xl bg-bluetheme-500 text-white text-xl md:text-2xl font-GraphicSchool' onClick={() => handleEditClick(lesson)}><MdEdit /></button>
-                                )}
+                                                                 {/* Edit Lesson Data */}
+                                 {(userType === 'Admin' || userType === 'Teacher') && (
+                                     <button className='absolute top-1 right-2 p-2 rounded-xl bg-bluetheme-500 text-white text-xl md:text-2xl font-GraphicSchool hover:bg-blue-600 transition-colors' onClick={() => handleEditClick(lesson)}><MdEdit /></button>
+                                 )}
 
                                 
 
@@ -845,7 +883,7 @@ export default function Course() {
                             <div className='flex flex-col items-center justify-center p-3 rounded-b-2xl bg-bluetheme-500 gap-2.5 relative w-full lg:rounded-[0] lg:rounded-r-2xl lg:p-1.5 lg:h-full'>
                                 <h2 className='bg-white text-bluetheme-500 p-1.5 lg:p-1 rounded-lg w-[50%] text-center head2'>{lesson.title}</h2>
                                 <span className='bg-white p-1.5 rounded-lg text-center labels'>السعر: {lesson.price} جنيه</span>
-                                {(showVideo || lesson.assignmentUrl) ? (
+                                {(showVideo || lesson.assignmentUrl || lesson.price > 0) ? (
                                     <>
                                         {lesson.assignmentUrl && (
                                             <button className='absolute top-[100%] text-bluetheme-500 rounded-b-2xl border-4 border-t-0 p-3 border-bluetheme-500 text-center transition-all duration-[0.2s] ease-in-out hover:bg-bluetheme-500 hover:text-white'
@@ -854,30 +892,35 @@ export default function Course() {
                                             </button>
                                         )}
                                         {(() => {
-                                            // التحقق من إمكانية الوصول للدرس
+                                                                                        // التحقق من إمكانية الوصول للدرس
                                             let canAccess = false;
                                             
-                                                                                         // التحقق من إمكانية الوصول للدرس
-                                            
-                                                                                         if (lessonIndex === 0) {
-                                                 // الدرس الأول متاح دائماً
-                                                 canAccess = true;
-                                             } else {
-                                                                                                 // للدروس الأخرى، نتحقق من نجاح امتحان الدرس نفسه (السابق)
-                                                 const currentLessonId = lesson._id;
-                                                 if (currentLessonId) {
-                                                     // البحث في examScores
-                                                     const examScore = examScores.find(score => {
-                                                         if (typeof score === 'object' && score.lessonId) {
-                                                             return score.lessonId.toString() === currentLessonId.toString();
-                                                         }
-                                                         return false;
-                                                     });
-                                                    
-                                                                                                         // حساب النسبة المئوية
-                                                     const percentage = examScore ? (examScore.score / examScore.total) * 100 : 0;
-                                                     canAccess = examScore && percentage >= 50;
-                                                 }
+                                            // التحقق من أن الدرس مشترى أولاً
+                                            if (isLessonPurchased || lesson.price === 0) {
+                                                // إذا كان الدرس مشترى أو مجاني، نتحقق من الامتحان
+                                                if (lessonIndex === 0) {
+                                                    // الدرس الأول متاح دائماً إذا كان مشترى أو مجاني
+                                                    canAccess = true;
+                                                } else {
+                                                    // للدروس الأخرى، نتحقق من نجاح امتحان الدرس نفسه (السابق)
+                                                    const currentLessonId = lesson._id;
+                                                    if (currentLessonId) {
+                                                        // البحث في examScores
+                                                        const examScore = examScores.find(score => {
+                                                            if (typeof score === 'object' && score.lessonId) {
+                                                                return score.lessonId.toString() === currentLessonId.toString();
+                                                            }
+                                                            return false;
+                                                        });
+                                                       
+                                                        // حساب النسبة المئوية
+                                                        const percentage = examScore ? (examScore.score / examScore.total) * 100 : 0;
+                                                        canAccess = examScore && percentage >= 50;
+                                                    }
+                                                }
+                                            } else {
+                                                // إذا لم يكن الدرس مشترى، لا يمكن الوصول له
+                                                canAccess = false;
                                             }
                                             
                                             // إذا كان يمكن الوصول للدرس، نعرض زر الدخول
@@ -938,8 +981,12 @@ export default function Course() {
                                                 );
                                             }
                                             
-                                            // إذا لم يكن يمكن الوصول للدرس، لا نعرض شيئاً
-                                            return null;
+                                            // إذا لم يكن يمكن الوصول للدرس، نعرض زر الشراء
+                                            return (
+                                                <button onClick={() => { setSelectedLesson(lesson); setAlert(true); }}>
+                                                    <Buy_single_lec />
+                                                </button>
+                                            );
                                         })()}
                                     </>
                                 ) : (
