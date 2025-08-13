@@ -812,27 +812,27 @@ export default function Course() {
                             // الدرس الأول متاح دائماً
                             canAccess = true;
                         } else {
-                            // للدروس الأخرى، نتحقق من نجاح امتحان الدرس السابق
-                            const previousLessonId = lessons[lessonIndex - 1]?._id;
-                            if (previousLessonId) {
-                                // البحث عن نتيجة امتحان الدرس السابق في examScores
-                                const previousExamScore = examScores.find(score => {
+                            // للدروس الأخرى، نتحقق من نجاح امتحان الدرس نفسه (امتحان الدرس السابق)
+                            const currentLessonId = lesson._id;
+                            if (currentLessonId) {
+                                // البحث عن نتيجة امتحان الدرس الحالي في examScores
+                                const currentExamScore = examScores.find(score => {
                                     // التحقق من أن score هو كائن يحتوي على lessonId
                                     if (typeof score === 'object' && score.lessonId) {
-                                        return score.lessonId.toString() === previousLessonId.toString();
+                                        return score.lessonId.toString() === currentLessonId.toString();
                                     }
                                     return false;
                                 });
                                 
-                                if (previousExamScore) {
-                                    // إذا كان هناك امتحان سابق، نتحقق من النتيجة
+                                if (currentExamScore) {
+                                    // إذا كان هناك امتحان للدرس، نتحقق من النتيجة
                                     let score = 0;
-                                    if (typeof previousExamScore === 'object' && previousExamScore.score !== undefined) {
-                                        score = previousExamScore.score;
+                                    if (typeof currentExamScore === 'object' && currentExamScore.score !== undefined) {
+                                        score = currentExamScore.score;
                                     }
                                     canAccess = score >= 50; // نجاح بنسبة 50%+
                                 } else {
-                                    // إذا لم يكن هناك امتحان سابق، لا يمكن الوصول للدرس
+                                    // إذا لم يكن هناك امتحان للدرس، لا يمكن الوصول له
                                     canAccess = false;
                                 }
                             } else {
@@ -895,7 +895,7 @@ export default function Course() {
                                 {!canAccess && lessonIndex > 0 && (
                                     <div className='absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-75 text-white text-center p-3 rounded-lg max-w-[80%]'>
                                         <p className='text-sm font-bold'>مقفل</p>
-                                        <p className='text-xs mt-1'>يجب نجاح امتحان الحصة السابقة</p>
+                                        <p className='text-xs mt-1'>يجب نجاح امتحان الحصة</p>
                                         <p className='text-xs'>(50% أو أكثر)</p>
                                     </div>
                                 )}
@@ -997,7 +997,7 @@ export default function Course() {
                                         ) : lessonIndex > 0 ? (
                                             <div className='flex flex-col items-center gap-2'>
                                                 <div className='text-center text-gray-600 text-sm p-2 bg-gray-100 rounded-lg'>
-                                                    <p>يجب نجاح امتحان الحصة السابقة أولاً</p>
+                                                    <p>يجب نجاح امتحان الحصة أولاً</p>
                                                     <p className='text-xs text-gray-500 mt-1'>(50% أو أكثر)</p>
                                                 </div>
                                             </div>

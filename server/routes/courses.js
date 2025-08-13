@@ -857,17 +857,18 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
     } else if (lessonActivation) {
       canAccessLesson = true;
     } else {
-      // التحقق من نجاح امتحان الدرس السابق (50% أو أكثر)
-      if (previousLessonId) {
-        const previousExamScore = user.examScores.find(score => 
-          score.lessonId && score.lessonId.toString() === previousLessonId.toString()
+      // التحقق من نجاح امتحان الدرس نفسه (امتحان الدرس السابق) بنسبة 50% أو أكثر
+      const currentLessonId = lessonId;
+      if (currentLessonId) {
+        const currentExamScore = user.examScores.find(score => 
+          score.lessonId && score.lessonId.toString() === currentLessonId.toString()
         );
         
-        if (previousExamScore) {
-          // يمكن الوصول إذا نجح في الامتحان السابق بنسبة 50% أو أكثر
-          canAccessLesson = previousExamScore.score >= 50;
+        if (currentExamScore) {
+          // يمكن الوصول إذا نجح في امتحان الدرس نفسه بنسبة 50% أو أكثر
+          canAccessLesson = currentExamScore.score >= 50;
         } else {
-          // لا يمكن الوصول إذا لم يكن هناك امتحان سابق
+          // لا يمكن الوصول إذا لم يكن هناك امتحان للدرس
           canAccessLesson = false;
         }
       } else {
