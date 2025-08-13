@@ -856,6 +856,23 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
       canAccessLesson = true;
     } else if (lessonActivation) {
       canAccessLesson = true;
+    } else {
+      // التحقق من نجاح امتحان الدرس السابق (50% أو أكثر)
+      if (previousLessonId) {
+        const previousExamScore = user.examScores.find(score => 
+          score.lessonId && score.lessonId.toString() === previousLessonId.toString()
+        );
+        
+        if (previousExamScore) {
+          // يمكن الوصول إذا نجح في الامتحان السابق بنسبة 50% أو أكثر
+          canAccessLesson = previousExamScore.score >= 50;
+        } else {
+          // لا يمكن الوصول إذا لم يكن هناك امتحان سابق
+          canAccessLesson = false;
+        }
+      } else {
+        canAccessLesson = false;
+      }
     }
 
     res.json({

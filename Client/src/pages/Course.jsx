@@ -800,51 +800,44 @@ export default function Course() {
                         })
                         : null;
                     
-                    // منطق التفعيل المبسط
+                    // استخدام البيانات من الخادم أولاً، ثم المنطق المحلي كاحتياطي
                     let canAccess = false;
-                    if (lessonIndex === 0) {
-                        // الدرس الأول متاح دائماً
-                        canAccess = true;
+                    
+                    // التحقق من البيانات القادمة من الخادم
+                    if (lessonStatuses[lesson._id] && lessonStatuses[lesson._id].canAccessLesson !== undefined) {
+                        canAccess = lessonStatuses[lesson._id].canAccessLesson;
                     } else {
-                        // للدروس الأخرى، نتحقق من نجاح امتحان الدرس السابق
-                        const previousLessonId = lessons[lessonIndex - 1]?._id;
-                        if (previousLessonId) {
-                            // البحث عن نتيجة امتحان الدرس السابق في examScores
-                            const previousExamScore = examScores.find(score => {
-                                // التحقق من أن score هو كائن يحتوي على lessonId
-                                if (typeof score === 'object' && score.lessonId) {
-                                    return score.lessonId.toString() === previousLessonId.toString();
-                                }
-                                return false;
-                            });
-                            
-                            if (previousExamScore) {
-                                // إذا كان هناك امتحان سابق، نتحقق من النتيجة
-                                let score = 0;
-                                if (typeof previousExamScore === 'object' && previousExamScore.score !== undefined) {
-                                    score = previousExamScore.score;
-                                }
-                                canAccess = score >= 50; // نجاح بنسبة 50%+
+                        // المنطق المحلي كاحتياطي
+                        if (lessonIndex === 0) {
+                            // الدرس الأول متاح دائماً
+                            canAccess = true;
+                        } else {
+                            // للدروس الأخرى، نتحقق من نجاح امتحان الدرس السابق
+                            const previousLessonId = lessons[lessonIndex - 1]?._id;
+                            if (previousLessonId) {
+                                // البحث عن نتيجة امتحان الدرس السابق في examScores
+                                const previousExamScore = examScores.find(score => {
+                                    // التحقق من أن score هو كائن يحتوي على lessonId
+                                    if (typeof score === 'object' && score.lessonId) {
+                                        return score.lessonId.toString() === previousLessonId.toString();
+                                    }
+                                    return false;
+                                });
                                 
-                                // إضافة تشخيص مؤقت للمساعدة في تحديد المشكلة
-                                if (lesson.title && (lesson.title.includes('ثاني') || lesson.title.includes('2'))) {
-                                    console.log('🔍 تشخيص الدرس:', {
-                                        lessonTitle: lesson.title,
-                                        lessonId: lesson._id,
-                                        previousLessonId,
-                                        examScoresLength: examScores.length,
-                                        previousExamScore,
-                                        score,
-                                        canAccess,
-                                        examScores: examScores
-                                    });
+                                if (previousExamScore) {
+                                    // إذا كان هناك امتحان سابق، نتحقق من النتيجة
+                                    let score = 0;
+                                    if (typeof previousExamScore === 'object' && previousExamScore.score !== undefined) {
+                                        score = previousExamScore.score;
+                                    }
+                                    canAccess = score >= 50; // نجاح بنسبة 50%+
+                                } else {
+                                    // إذا لم يكن هناك امتحان سابق، لا يمكن الوصول للدرس
+                                    canAccess = false;
                                 }
                             } else {
-                                // إذا لم يكن هناك امتحان سابق، نفتح الدرس مباشرة
-                                canAccess = true;
+                                canAccess = false;
                             }
-                        } else {
-                            canAccess = true;
                         }
                     }
                     
@@ -854,11 +847,16 @@ export default function Course() {
                     const key = `${lesson._id}-${forceUpdate}`;
                     
                     // منطق إظهار الفيديو والواجب
-                    const showVideo = lessonUnlocked && lesson.videoUrl;
+                    const showVideo = canAccess && lesson.videoUrl;
                     const showAssignment = true; // زر الواجب يظهر دائماً
                     
                     // التحقق من أن الدرس مشترى (للتحكم في عرض زر الشراء)
                     const isLessonPurchased = courseUnlocked || (lessonActivation && (lessonActivation.video || lessonActivation.assignment));
+                    
+                    // إذا كان الدرس متاح من خلال نجاح الامتحان السابق، لا نحتاج لشرائه
+                    if (canAccess && !isLessonPurchased) {
+                        // الدرس متاح من خلال نجاح الامتحان السابق
+                    }
                     
 
                     
@@ -872,10 +870,8 @@ export default function Course() {
                         // الدرس الأول متاح دائماً للامتحان
                         canTakeCurrentExamBtn = true;
                     } else {
-                        // يمكن أخذ الامتحان إذا كنت قد شاهدت الدرس (عدد المشاهدات أقل من العدد الأساسي)
-                        const remainingViews = getRemainingViews(lesson._id);
-                        const viewLimit = lesson.viewLimit || 5;
-                        canTakeCurrentExamBtn = remainingViews < viewLimit; // إذا كان عدد المشاهدات أقل من الحد الأقصى
+                        // يمكن أخذ الامتحان إذا كان يمكن الوصول للدرس
+                        canTakeCurrentExamBtn = canAccess;
                     }
                     
                     return (
@@ -894,6 +890,15 @@ export default function Course() {
                                 {!(showVideo || lesson.assignmentUrl) && (
                                     <span className='absolute top-2 left-2 bg-white rounded-full p-2 shadow'><FaLock className='text-gray-500 text-xl' /></span>
                                 )}
+                                
+                                {/* رسالة توضيحية للدرس المقفل */}
+                                {!canAccess && lessonIndex > 0 && (
+                                    <div className='absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black bg-opacity-75 text-white text-center p-3 rounded-lg max-w-[80%]'>
+                                        <p className='text-sm font-bold'>مقفل</p>
+                                        <p className='text-xs mt-1'>يجب نجاح امتحان الحصة السابقة</p>
+                                        <p className='text-xs'>(50% أو أكثر)</p>
+                                    </div>
+                                )}
                             </div>
                             <div className='flex flex-col items-center justify-center p-3 rounded-b-2xl bg-bluetheme-500 gap-2.5 relative w-full lg:rounded-[0] lg:rounded-r-2xl lg:p-1.5 lg:h-full'>
                                 <h2 className='bg-white text-bluetheme-500 p-1.5 lg:p-1 rounded-lg w-[50%] text-center head2'>{lesson.title}</h2>
@@ -906,22 +911,16 @@ export default function Course() {
                                                 واجب الحصة
                                             </button>
                                         )}
-                                        {showVideo && (
+                                        {canAccess ? (
                                             <div className='flex flex-col items-center gap-2'>
                                                 <button
-                                                    className={`rounded-lg p-1 enter mt-2 transition-all duration-300 ${getRemainingViews(lesson._id) > 0 && canAccess
+                                                    className={`rounded-lg p-1 enter mt-2 transition-all duration-300 ${getRemainingViews(lesson._id) > 0
                                                         ? 'bg-green-700 text-white hover:bg-green-800'
                                                         : 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                                         }`}
                                                     onClick={() => {
                                                         if (getRemainingViews(lesson._id) <= 0) {
                                                             window.alert('انتهت مرات المشاهدة المسموحة لهذا الدرس');
-                                                            return;
-                                                        }
-
-                                                        // التحقق من نجاح الامتحان السابق
-                                                        if (!canAccess) {
-                                                            window.alert('يجب نجاح امتحان الحصة السابقة أولاً (50%+)');
                                                             return;
                                                         }
 
@@ -955,9 +954,9 @@ export default function Course() {
                                                         
                                                         navigate(`/course/${courseId}/lesson/${lesson._id}`, { state: { videoUrl: lesson.videoUrl } });
                                                     }}
-                                                    disabled={getRemainingViews(lesson._id) <= 0 || !canAccess}
+                                                    disabled={getRemainingViews(lesson._id) <= 0}
                                                 >
-                                                    {getRemainingViews(lesson._id) <= 0 ? 'انتهت مرات المشاهدة' : (canAccess ? 'دخول الحصة' : 'يجب نجاح امتحان الحصة السابقة (50%+)')}
+                                                    {getRemainingViews(lesson._id) <= 0 ? 'انتهت مرات المشاهدة' : 'دخول الحصة'}
                                                 </button>
                                                 <span className={`text-xs ${getRemainingViews(lesson._id) <= 0 ? 'text-red-500' : 'text-gray-600'}`}>
                                                     متبقي: {getRemainingViews(lesson._id)} مشاهدة
@@ -974,7 +973,7 @@ export default function Course() {
                                                                 min="1" 
                                                                 max="10"
                                                                 defaultValue="1"
-                                                                className='w-12 h-6 text-xs text-center border rounded'
+                                                                className='w-12 h-6 text-center border rounded'
                                                                 id={`views-${lesson._id}`}
                                                             />
                                                             <button 
@@ -995,8 +994,21 @@ export default function Course() {
                                                     </div>
                                                 )}
                                             </div>
-                                        )}
+                                        ) : lessonIndex > 0 ? (
+                                            <div className='flex flex-col items-center gap-2'>
+                                                <div className='text-center text-gray-600 text-sm p-2 bg-gray-100 rounded-lg'>
+                                                    <p>يجب نجاح امتحان الحصة السابقة أولاً</p>
+                                                    <p className='text-xs text-gray-500 mt-1'>(50% أو أكثر)</p>
+                                                </div>
+                                            </div>
+                                        ) : null}
                                     </>
+                                ) : canAccess ? (
+                                    // الدرس متاح من خلال نجاح الامتحان السابق، لا نحتاج لشرائه
+                                    <div className='text-center text-green-600 text-sm p-2 bg-green-100 rounded-lg'>
+                                        <p>الدرس متاح</p>
+                                        <p className='text-xs text-green-500 mt-1'>من خلال نجاح الامتحان السابق</p>
+                                    </div>
                                 ) : (
                                     <button onClick={() => { setSelectedLesson(lesson); setAlert(true); }}>
                                         <Buy_single_lec />
@@ -1004,27 +1016,29 @@ export default function Course() {
                                 )}
 
                                 {/*--------------Last Edit--------------*/}
-                                {/* زرار الامتحان */}
-                                <div className='w-[100%] flex flex-col justify-center items-center gap-1 lg:flex-row lg:gap-2'>
-                                    <button 
-                                        className={`${canTakePreviousExamBtn 
-                                            ? 'bg-amber-400 hover:bg-amber-500 cursor-pointer' 
-                                            : 'bg-gray-400 cursor-not-allowed opacity-50'} text-black md:text-[0.95rem] lg:text-[1rem] p-1 rounded-lg text-[0.8rem]`}
-                                        disabled={!canTakePreviousExamBtn}
-                                        onClick={() => handlePreviousExam(lesson._id)}
-                                    >
-                                        امتحان الحصة السابقة
-                                    </button>
-                                    <button 
-                                        className={`${canTakeCurrentExamBtn 
-                                            ? 'bg-amber-400 hover:bg-amber-500 cursor-pointer' 
-                                            : 'bg-gray-400 cursor-not-allowed opacity-50'} text-black md:text-[0.95rem] lg:text-[1rem] p-1 rounded-lg text-[0.8rem]`}
-                                        disabled={!canTakeCurrentExamBtn}
-                                        onClick={() => handleCurrentExam(lesson._id)}
-                                    >
-                                        امتحان الحصة الحالية
-                                    </button>
-                                </div>
+                                {/* زرار الامتحان - يظهر فقط إذا كان الدرس مشترى أو مجاني */}
+                                {(lesson.price === 0 || isLessonPurchased) && (
+                                    <div className='w-[100%] flex flex-col justify-center items-center gap-1 lg:flex-row lg:gap-2'>
+                                        <button 
+                                            className={`${canTakePreviousExamBtn 
+                                                ? 'bg-amber-400 hover:bg-amber-500 cursor-pointer' 
+                                                : 'bg-gray-400 cursor-not-allowed opacity-50'} text-black md:text-[0.95rem] lg:text-[1rem] p-1 rounded-lg text-[0.8rem]`}
+                                            disabled={!canTakePreviousExamBtn}
+                                            onClick={() => handlePreviousExam(lesson._id)}
+                                        >
+                                            امتحان الحصة السابقة
+                                        </button>
+                                        <button 
+                                            className={`${canTakeCurrentExamBtn 
+                                                ? 'bg-amber-400 hover:bg-amber-500 cursor-pointer' 
+                                                : 'bg-gray-400 cursor-not-allowed opacity-50'} text-black md:text-[0.95rem] lg:text-[1rem] p-1 rounded-lg text-[0.8rem]`}
+                                            disabled={!canTakeCurrentExamBtn}
+                                            onClick={() => handleCurrentExam(lesson._id)}
+                                        >
+                                            امتحان الحصة الحالية
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     );
