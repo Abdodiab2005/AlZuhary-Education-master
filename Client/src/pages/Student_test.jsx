@@ -46,16 +46,8 @@ export default function Student_test() {
             const userData = userResponse.data;
             const examScore = userData.examScores?.find(score => score.examId === examId);
             
-            if (examScore) {
-                // إذا كان الامتحان مأخوذ مسبقاً، اعرض النتيجة
-                setScore({
-                    score: examScore.score,
-                    total: examScore.total,
-                    percentage: Math.round((examScore.score / examScore.total) * 100),
-                    passed: examScore.passed
-                });
-                setIsSubmitted(true);
-            }
+            // لا نعرض النتيجة السابقة، نسمح للطالب يأخذ الامتحان مرة تانية
+            // إذا كان يريد رؤية النتيجة السابقة، يمكنه الضغط على زر "تسليم"
         } catch (error) {
             // تجاهل الأخطاء في التحقق من الحالة
         } finally {
@@ -126,18 +118,8 @@ export default function Student_test() {
             }
         } catch (error) {
             if (error.response?.status === 400 && error.response?.data?.message) {
-                // إذا كان الخطأ 400، اعرض الرسالة المحددة من السيرفر
-                if (error.response.data.message === 'لقد أخذت هذا الامتحان من قبل') {
-                    // إذا كان الامتحان مأخوذ مسبقاً، اعرض النتيجة السابقة
-                    setScore(error.response.data.previousScore);
-                    setIsSubmitted(true);
-                    alert('لقد أخذت هذا الامتحان من قبل. النتيجة السابقة: ' + 
-                          error.response.data.previousScore.score + '/' + 
-                          error.response.data.previousScore.total + 
-                          ' (' + error.response.data.previousScore.percentage + '%)');
-                } else {
-                    alert(error.response.data.message);
-                }
+                // عرض رسالة الخطأ من السيرفر
+                alert(error.response.data.message);
             } else {
                 alert('حدث خطأ في إرسال الامتحان');
             }

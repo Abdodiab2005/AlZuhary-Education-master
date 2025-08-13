@@ -104,28 +104,28 @@ router.post('/:examId/submit', authenticateToken, async (req, res) => {
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
-    // التحقق من أن المستخدم لم يسبق له أخذ هذا الامتحان
-    const already = user.examScores.find(e => e.examId.toString() === exam._id.toString());
-    if (already) {
-      return res.status(400).json({ 
-        message: 'لقد أخذت هذا الامتحان من قبل',
-        previousScore: {
-          score: already.score,
-          total: already.total,
-          percentage: Math.round((already.score / already.total) * 100),
-          passed: already.passed
-        }
+    // التحقق من أن المستخدم قد أخذ هذا الامتحان من قبل
+    const existingScoreIndex = user.examScores.findIndex(e => e.examId.toString() === exam._id.toString());
+    
+    if (existingScoreIndex !== -1) {
+      // تحديث النتيجة الموجودة
+      user.examScores[existingScoreIndex] = {
+        examId: exam._id,
+        lessonId: exam.lessonId,
+        score: result.score,
+        total: result.totalPossible,
+        passed
+      };
+    } else {
+      // تسجيل النتيجة الجديدة
+      user.examScores.push({
+        examId: exam._id,
+        lessonId: exam.lessonId,
+        score: result.score,
+        total: result.totalPossible,
+        passed
       });
     }
-    
-    // تسجيل النتيجة الجديدة
-    user.examScores.push({
-      examId: exam._id,
-      lessonId: exam.lessonId,
-      score: result.score,
-      total: result.totalPossible,
-      passed
-    });
     await user.save();
     
     res.json({ 
