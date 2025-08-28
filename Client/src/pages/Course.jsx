@@ -41,6 +41,7 @@ export default function Course() {
 
     // فحص courseId
     console.log('courseId من useParams:', courseId);
+    console.log('lessons:', lessons);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -981,7 +982,23 @@ export default function Course() {
                                                 );
                                             }
                                             
-                                            // إذا لم يكن يمكن الوصول للدرس، نعرض زر الشراء
+                                            // إذا كان الدرس مشترى ولكن لا يمكن الوصول له (لم ينجح في الامتحان السابق)
+                                            if (isLessonPurchased || lesson.price === 0) {
+                                                return (
+                                                    <div className='flex flex-col items-center gap-2'>
+                                                        <div className='bg-amber-100 border-2 border-amber-400 rounded-lg p-3 text-center max-w-[200px]'>
+                                                            <p className='text-amber-800 text-sm font-medium mb-1'>
+                                                                يجب النجاح في امتحان الحصة السابقة
+                                                            </p>
+                                                            <p className='text-amber-700 text-xs'>
+                                                                بنسبة 50% أو أكثر
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+                                            
+                                            // إذا لم يكن الدرس مشترى، نعرض زر الشراء
                                             return (
                                                 <button onClick={() => { setSelectedLesson(lesson); setAlert(true); }}>
                                                     <Buy_single_lec />
