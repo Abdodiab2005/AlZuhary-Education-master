@@ -844,9 +844,8 @@ export default function Course() {
                                                              // مفتاح فريد لكل درس
                      const key = `${lesson._id}`;
                     
-                    // منطق إظهار الفيديو والواجب
-                    const showVideo = lesson.videoUrl;
-                    const showAssignment = true; // زر الواجب يظهر دائماً
+                                         // منطق إظهار الفيديو
+                     const showVideo = lesson.videoUrl;
                     
                     // التحقق من أن الدرس مشترى (للتحكم في عرض زر الشراء)
                     const isLessonPurchased = courseUnlocked || (lessonActivation && (lessonActivation.video || lessonActivation.assignment));
@@ -884,14 +883,17 @@ export default function Course() {
                             <div className='flex flex-col items-center justify-center p-3 rounded-b-2xl bg-bluetheme-500 gap-2.5 relative w-full lg:rounded-[0] lg:rounded-r-2xl lg:p-1.5 lg:h-full'>
                                 <h2 className='bg-white text-bluetheme-500 p-1.5 lg:p-1 rounded-lg w-[50%] text-center head2'>{lesson.title}</h2>
                                 <span className='bg-white p-1.5 rounded-lg text-center labels'>السعر: {lesson.price} جنيه</span>
-                                {(showVideo || lesson.assignmentUrl || lesson.price > 0) ? (
-                                    <>
-                                        {lesson.assignmentUrl && (
-                                            <button className='absolute top-[100%] text-bluetheme-500 rounded-b-2xl border-4 border-t-0 p-3 border-bluetheme-500 text-center transition-all duration-[0.2s] ease-in-out hover:bg-bluetheme-500 hover:text-white'
-                                                onClick={() => navigate(`/course/${courseId}/lesson/${lesson._id}`, { state: { videoUrl: lesson.assignmentUrl, isAssignment: true } })}>
-                                                واجب الحصة
-                                            </button>
-                                        )}
+                                                                 {/* زر الواجب - متاح دائماً بدون أي شروط */}
+                                 {lesson.assignmentUrl && (
+                                     <button className='absolute top-[100%] text-bluetheme-500 rounded-b-2xl border-4 border-t-0 p-3 border-bluetheme-500 text-center transition-all duration-[0.2s] ease-in-out hover:bg-bluetheme-500 hover:text-white'
+                                         onClick={() => navigate(`/course/${courseId}/lesson/${lesson._id}`, { state: { videoUrl: lesson.assignmentUrl, isAssignment: true } })}>
+                                         واجب الحصة
+                                     </button>
+                                 )}
+
+                                 {/* منطق الفيديو والشراء - منفصل عن الواجب */}
+                                 {(showVideo || lesson.price > 0) ? (
+                                     <>
                                         {(() => {
                                                                                         // التحقق من إمكانية الوصول للدرس
                                             let canAccess = false;
