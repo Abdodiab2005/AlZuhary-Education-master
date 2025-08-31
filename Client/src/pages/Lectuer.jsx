@@ -24,6 +24,12 @@ export default function Lectuer() {
                 return;
             }
 
+            // إذا كان واجب، متاح دائماً بدون تحقق
+            if (isAssignment) {
+                setAccessChecked(true);
+                return;
+            }
+
             try {
                 const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}/access-check`, {
                     headers: { Authorization: `Bearer ${token}` }
@@ -43,7 +49,7 @@ export default function Lectuer() {
         };
 
         checkAccess();
-    }, [courseId, lessonId, navigate]);
+    }, [courseId, lessonId, navigate, isAssignment]);
 
     useEffect(() => {
         if (!videoUrl && accessChecked) {
