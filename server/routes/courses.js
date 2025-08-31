@@ -657,6 +657,7 @@ router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async
 
     const lessons = course.lessons;
     const currentLessonIndex = lessons.findIndex(l => l._id.toString() === lessonId);
+    const lesson = course.lessons.id(lessonId);
     
     // إذا كان الدرس الأول، يمكن الوصول إليه دائماً
     if (currentLessonIndex === 0) {
@@ -697,7 +698,16 @@ router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async
       }
     }
 
-    // إذا لم يكن مفعل ولم ينجح في الامتحان، لا يمكن الوصول
+    // الواجب متاح دائماً بدون شروط
+    if (lesson.assignmentUrl) {
+      return res.json({ 
+        canAccess: true, 
+        reason: 'Assignment always available',
+        isAssignment: true
+      });
+    }
+
+    // إذا لم يكن مفعل ولم ينجح في الامتحان وليس واجب، لا يمكن الوصول
     return res.json({ 
       canAccess: false, 
       reason: 'Lesson not activated and exam not passed'
