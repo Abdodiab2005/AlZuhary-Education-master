@@ -26,7 +26,7 @@ export default function Course() {
     const [newLesson, setNewLesson] = useState({ title: '', price: '', videoUrl: '', assignmentUrl: '', viewLimit: 5, viewPrice: 10, isHidden: false });
     const [imageFile, setImageFile] = useState(null);
     const [editLesson, setEditLesson] = useState(null);
-    const [editForm, setEditForm] = useState({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10, isHidden: false });
+    const [editForm, setEditForm] = useState({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10 });
     const [selectedLesson, setSelectedLesson] = useState(null);
     const userType = localStorage.getItem('userType');
     const { courseId } = useParams();
@@ -94,12 +94,23 @@ export default function Course() {
 
         // جلب بيانات الكورس والدروس
         if (courseId) {
-            axios.get(`${API_BASE_URL}/api/courses/${courseId}`)
+            const headers = getAuthHeaders();
+            axios.get(`${API_BASE_URL}/api/courses/${courseId}`, { headers })
                 .then(res => {
                     setCourse(res.data);
                     setLessons(res.data.lessons || []);
                 })
-                .catch(() => {
+                .catch(err => {
+                    if (err.response?.status === 401) {
+                        // خطأ 401 - انتهت صلاحية الجلسة
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('userName');
+                        localStorage.removeItem('userType');
+                        localStorage.removeItem('year_stage');
+                        localStorage.removeItem('userData');
+                        navigate('/login');
+                        return;
+                    }
                     setCourse(null);
                     setLessons([]);
                 });
@@ -443,8 +454,7 @@ export default function Course() {
             assignmentUrl: lesson.assignmentUrl || '',
             image: null,
             viewLimit: parseInt(lesson.viewLimit) || 5,
-            viewPrice: parseInt(lesson.viewPrice) || 10,
-            isHidden: lesson.isHidden || false
+            viewPrice: parseInt(lesson.viewPrice) || 10
         });
     }, []);
 
@@ -458,8 +468,6 @@ export default function Course() {
             setEditForm(prev => ({ ...prev, [name]: value === '' ? 10 : parseInt(value) || 10 }));
         } else if (name === 'price') {
             setEditForm(prev => ({ ...prev, [name]: value === '' ? '' : parseInt(value) || 0 }));
-        } else if (name === 'isHidden') {
-            setEditForm(prev => ({ ...prev, [name]: e.target.checked }));
         } else {
             setEditForm(prev => ({ ...prev, [name]: value }));
         }
@@ -483,7 +491,6 @@ export default function Course() {
             formData.append('assignmentUrl', editForm.assignmentUrl);
             formData.append('viewLimit', parseInt(editForm.viewLimit) || 5);
             formData.append('viewPrice', parseInt(editForm.viewPrice) || 10);
-            formData.append('isHidden', editForm.isHidden);
             if (editForm.image) {
                 formData.append('image', editForm.image);
             }
@@ -497,7 +504,7 @@ export default function Course() {
 
             setLessons(prev => prev.map(l => l._id === editLesson._id ? res.data : l));
             setEditLesson(null);
-            setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10, isHidden: false });
+            setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10 });
         } catch (err) {
             window.alert('حدث خطأ أثناء تعديل الدرس');
         }
@@ -595,7 +602,7 @@ export default function Course() {
                     // إغلاق modal التعديل
                     setEditLesson(null);
                     // إعادة تعيين نموذج التعديل
-                    setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10, isHidden: false });
+                    setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10 });
                     
                     window.alert('تم حذف الدرس بنجاح!');
                 }
