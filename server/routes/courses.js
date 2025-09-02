@@ -218,7 +218,8 @@ router.post('/:id/lessons', upload.single('image'), async (req, res) => {
       videoUrl: convertToEmbedUrl(req.body.videoUrl),
       assignmentUrl: convertToEmbedUrl(req.body.assignmentUrl),
       viewLimit: parseInt(req.body.viewLimit) || 5,
-      viewPrice: parseInt(req.body.viewPrice) || 10
+      viewPrice: parseInt(req.body.viewPrice) || 10,
+      isHidden: req.body.isHidden === 'true' || req.body.isHidden === true
     };
     
     if (req.file) {
@@ -312,10 +313,26 @@ router.post('/:courseId/lessons/:lessonId/buy', authenticateToken, async (req, r
 });
 
 // جلب كورس محدد
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const course = await Course.findById(req.params.id);
     if (!course) return res.status(404).json({ message: 'الكورس غير موجود' });
+    
+    // التحقق من نوع المستخدم
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ message: 'المستخدم غير موجود' });
+    
+    // إذا كان المستخدم طالب، فلترة الدروس المخفية
+    if (user.type === 'Student') {
+      const filteredLessons = course.lessons.filter(lesson => !lesson.isHidden);
+      const courseForStudent = {
+        ...course.toObject(),
+        lessons: filteredLessons
+      };
+      return res.json(courseForStudent);
+    }
+    
+    // للمدرسين والأدمن، إرجاع جميع الدروس
     res.json(course);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -412,6 +429,7 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
     lesson.assignmentUrl = req.body.assignmentUrl ? convertToEmbedUrl(req.body.assignmentUrl) : lesson.assignmentUrl;
     lesson.viewLimit = req.body.viewLimit ? parseInt(req.body.viewLimit) : lesson.viewLimit;
     lesson.viewPrice = req.body.viewPrice ? parseInt(req.body.viewPrice) : lesson.viewPrice;
+    lesson.isHidden = req.body.isHidden !== undefined ? (req.body.isHidden === 'true' || req.body.isHidden === true) : lesson.isHidden;
     
     if (req.file) {
       lesson.image = `/uploads/${req.file.filename}`;
@@ -419,6 +437,28 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
     
     await course.save();
     res.json(lesson);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// تبديل حالة إخفاء/إظهار الدرس
+router.put('/:courseId/lessons/:lessonId/toggle-visibility', async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.courseId);
+    if (!course) return res.status(404).json({ message: 'الكورس غير موجود' });
+    
+    const lesson = course.lessons.id(req.params.lessonId);
+    if (!lesson) return res.status(404).json({ message: 'الدرس غير موجود' });
+    
+    // تبديل حالة الإخفاء
+    lesson.isHidden = req.body.isHidden;
+    
+    await course.save();
+    res.json({ 
+      message: 'تم تحديث حالة الدرس بنجاح',
+      isHidden: lesson.isHidden 
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
