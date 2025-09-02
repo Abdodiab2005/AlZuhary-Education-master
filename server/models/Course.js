@@ -8,7 +8,8 @@ const lessonSchema = new mongoose.Schema({
   assignmentUrl: { type: String },
   image: { type: String },
   viewLimit: { type: Number, default: 5 },
-  viewPrice: { type: Number, default: 10 } // سعر مرة المشاهدة الإضافية
+  viewPrice: { type: Number, default: 10 }, // سعر مرة المشاهدة الإضافية
+  isHidden: { type: Boolean, default: false } // إخفاء الدرس عن الطلاب
 });
 
 const courseSchema = new mongoose.Schema({
