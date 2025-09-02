@@ -8,6 +8,15 @@ axios.interceptors.response.use(
   (error) => {
     // التحقق من أن الخطأ 401 أو 403 يتعلق بالتوكن وليس بصلاحيات أخرى
     if (error.response?.status === 401) {
+      // التحقق من أن الطلب من صفحة الكورسات
+      const isCoursePage = window.location.pathname.includes('/course/');
+      
+      if (isCoursePage) {
+        // في صفحة الكورسات، لا نحذف الـ token تلقائياً
+        // نترك المعالجة للصفحة نفسها
+        return Promise.reject(error);
+      }
+      
       // خطأ 401 يعني أن التوكن غير صالح أو منتهي الصلاحية
       localStorage.removeItem('token');
       localStorage.removeItem('userName');
@@ -41,6 +50,11 @@ export const checkTokenValidity = async () => {
     });
     return true;
   } catch (error) {
+    // في حالة وجود خطأ في الشبكة أو الخادم، نعتبر الـ token صالح
+    if (!error.response) {
+      return true;
+    }
+    
     if (error.response?.status === 401) {
       // خطأ 401 يعني أن التوكن غير صالح أو منتهي الصلاحية
       localStorage.removeItem('token');
@@ -50,6 +64,7 @@ export const checkTokenValidity = async () => {
       localStorage.removeItem('userData');
       return false;
     }
+    
     // خطأ 403 أو أي خطأ آخر لا يعني بالضرورة انتهاء صلاحية التوكن
     return true;
   }
