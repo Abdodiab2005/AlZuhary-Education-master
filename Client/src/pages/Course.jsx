@@ -23,10 +23,10 @@ export default function Course() {
     const [purchasedLessons, setPurchasedLessons] = useState([]);
     const [purchasedCourses, setPurchasedCourses] = useState([]);
     const [balance, setBalance] = useState(0);
-    const [newLesson, setNewLesson] = useState({ title: '', price: '', videoUrl: '', assignmentUrl: '', viewLimit: 5, viewPrice: 10 });
+    const [newLesson, setNewLesson] = useState({ title: '', price: '', videoUrl: '', assignmentUrl: '', viewLimit: 5, viewPrice: 10, isHidden: false });
     const [imageFile, setImageFile] = useState(null);
     const [editLesson, setEditLesson] = useState(null);
-    const [editForm, setEditForm] = useState({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10 });
+    const [editForm, setEditForm] = useState({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10, isHidden: false });
     const [selectedLesson, setSelectedLesson] = useState(null);
     const userType = localStorage.getItem('userType');
     const { courseId } = useParams();
@@ -40,8 +40,6 @@ export default function Course() {
     const [viewInputs, setViewInputs] = useState({});
 
     // فحص courseId
-    console.log('courseId من useParams:', courseId);
-    console.log('lessons:', lessons);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -339,6 +337,7 @@ export default function Course() {
             formData.append('assignmentUrl', newLesson.assignmentUrl);
             formData.append('viewLimit', parseInt(newLesson.viewLimit) || 5);
             formData.append('viewPrice', parseInt(newLesson.viewPrice) || 10);
+            formData.append('isHidden', newLesson.isHidden);
             if (imageFile) {
                 formData.append('image', imageFile);
             }
@@ -363,7 +362,7 @@ export default function Course() {
             }
 
             setLessons(prev => [...prev, res.data]);
-            setNewLesson({ title: '', price: '', videoUrl: '', assignmentUrl: '', viewLimit: 5, viewPrice: 10 });
+            setNewLesson({ title: '', price: '', videoUrl: '', assignmentUrl: '', viewLimit: 5, viewPrice: 10, isHidden: false });
             setImageFile(null);
             setLesson(false);
         } catch (err) {
@@ -444,7 +443,8 @@ export default function Course() {
             assignmentUrl: lesson.assignmentUrl || '',
             image: null,
             viewLimit: parseInt(lesson.viewLimit) || 5,
-            viewPrice: parseInt(lesson.viewPrice) || 10
+            viewPrice: parseInt(lesson.viewPrice) || 10,
+            isHidden: lesson.isHidden || false
         });
     }, []);
 
@@ -458,6 +458,8 @@ export default function Course() {
             setEditForm(prev => ({ ...prev, [name]: value === '' ? 10 : parseInt(value) || 10 }));
         } else if (name === 'price') {
             setEditForm(prev => ({ ...prev, [name]: value === '' ? '' : parseInt(value) || 0 }));
+        } else if (name === 'isHidden') {
+            setEditForm(prev => ({ ...prev, [name]: e.target.checked }));
         } else {
             setEditForm(prev => ({ ...prev, [name]: value }));
         }
@@ -481,6 +483,7 @@ export default function Course() {
             formData.append('assignmentUrl', editForm.assignmentUrl);
             formData.append('viewLimit', parseInt(editForm.viewLimit) || 5);
             formData.append('viewPrice', parseInt(editForm.viewPrice) || 10);
+            formData.append('isHidden', editForm.isHidden);
             if (editForm.image) {
                 formData.append('image', editForm.image);
             }
@@ -494,11 +497,67 @@ export default function Course() {
 
             setLessons(prev => prev.map(l => l._id === editLesson._id ? res.data : l));
             setEditLesson(null);
-            setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10 });
+            setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10, isHidden: false });
         } catch (err) {
             window.alert('حدث خطأ أثناء تعديل الدرس');
         }
     }, [courseId, editLesson, editForm]);
+
+    // دالة للتبديل السريع بين إخفاء وإظهار الدرس
+    const handleToggleLessonVisibility = useCallback(async (lessonId) => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.alert('يجب تسجيل الدخول أولاً');
+            return;
+        }
+        if (!courseId) {
+            window.alert('معرف الكورس غير موجود');
+            return;
+        }
+        if (!lessonId) {
+            window.alert('معرف الدرس غير موجود');
+            return;
+        }
+        
+        try {
+            // العثور على الدرس الحالي
+            const lesson = lessons.find(l => l._id === lessonId);
+            if (!lesson) {
+                window.alert('الدرس غير موجود');
+                return;
+            }
+            
+            // تبديل حالة الإخفاء
+            const newHiddenState = !(lesson.isHidden || false);
+            
+            const response = await axios.put(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`, {
+                isHidden: newHiddenState
+            }, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.status === 200) {
+                // تحديث حالة الدرس في القائمة
+                setLessons(prev => prev.map(l => 
+                    l._id === lessonId 
+                        ? { ...l, isHidden: newHiddenState }
+                        : l
+                ));
+                
+                const message = newHiddenState ? 'تم إخفاء الدرس عن الطلاب' : 'تم إظهار الدرس للطلاب';
+                window.alert(message);
+            }
+        } catch (err) {
+            console.error('خطأ في تبديل حالة الدرس:', err);
+            if (err.response?.status === 404) {
+                window.alert('الدرس غير موجود');
+            } else if (err.response?.status === 403) {
+                window.alert('ليس لديك صلاحية لتعديل هذا الدرس');
+            } else {
+                window.alert(`حدث خطأ أثناء تحديث الدرس: ${err.message}`);
+            }
+        }
+    }, [courseId, lessons]);
 
     const handleDeleteLesson = useCallback(async (lessonId) => {
         const token = localStorage.getItem('token');
@@ -536,7 +595,7 @@ export default function Course() {
                     // إغلاق modal التعديل
                     setEditLesson(null);
                     // إعادة تعيين نموذج التعديل
-                    setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10 });
+                    setEditForm({ title: '', price: '', videoUrl: '', assignmentUrl: '', image: null, viewLimit: 5, viewPrice: 10, isHidden: false });
                     
                     window.alert('تم حذف الدرس بنجاح!');
                 }
@@ -874,7 +933,20 @@ export default function Course() {
                                 )}
                                                                  {/* Edit Lesson Data */}
                                  {(userType === 'Admin' || userType === 'Teacher') && (
-                                     <button className='absolute top-1 right-2 p-2 rounded-xl bg-bluetheme-500 text-white text-xl md:text-2xl font-GraphicSchool hover:bg-blue-600 transition-colors' onClick={() => handleEditClick(lesson)}><MdEdit /></button>
+                                     <div className='absolute top-1 right-2 flex gap-1'>
+                                         <button 
+                                             className={`p-2 rounded-xl text-white text-xl md:text-2xl font-GraphicSchool transition-colors ${
+                                                 (lesson.isHidden || false)
+                                                     ? 'bg-green-500 hover:bg-green-600' 
+                                                     : 'bg-red-500 hover:bg-red-600'
+                                             }`}
+                                             onClick={() => handleToggleLessonVisibility(lesson._id)}
+                                             title={(lesson.isHidden || false) ? 'إظهار الدرس للطلاب' : 'إخفاء الدرس عن الطلاب'}
+                                         >
+                                             {(lesson.isHidden || false) ? '👁' : '🚫'}
+                                         </button>
+                                         <button className='p-2 rounded-xl bg-bluetheme-500 text-white text-xl md:text-2xl font-GraphicSchool hover:bg-blue-600 transition-colors' onClick={() => handleEditClick(lesson)}><MdEdit /></button>
+                                     </div>
                                  )}
 
                                 
@@ -883,6 +955,12 @@ export default function Course() {
                             <div className='flex flex-col items-center justify-center p-3 rounded-b-2xl bg-bluetheme-500 gap-2.5 relative w-full lg:rounded-[0] lg:rounded-r-2xl lg:p-1.5 lg:h-full'>
                                 <h2 className='bg-white text-bluetheme-500 p-1.5 lg:p-1 rounded-lg w-[50%] text-center head2'>{lesson.title}</h2>
                                 <span className='bg-white p-1.5 rounded-lg text-center labels'>السعر: {lesson.price} جنيه</span>
+                                {/* مؤشر الدرس المخفي */}
+                                {(lesson.isHidden || false) && (userType === 'Admin' || userType === 'Teacher') && (
+                                    <div className='bg-red-500 text-white px-2 py-1 rounded text-xs font-bold'>
+                                        مخفي عن الطلاب
+                                    </div>
+                                )}
                                                                  {/* زر الواجب - متاح دائماً بدون أي شروط */}
                                  {lesson.assignmentUrl && (
                                      <button className='absolute top-[100%] text-bluetheme-500 rounded-b-2xl border-4 border-t-0 p-3 border-bluetheme-500 text-center transition-all duration-[0.2s] ease-in-out hover:bg-bluetheme-500 hover:text-white'
@@ -1081,7 +1159,7 @@ export default function Course() {
                     {/* Save & Delete Button */}
                     <div className='flex justify-center items-center gap-3'>
                         <button type="submit" className='bg-green-500 hover:bg-green-600 hover:text-white transition-all duration-[0.2s] rounded-xl p-1.5 text-xl pr-2 pl-2 mt-3 mb-1.5'>حفظ</button>
-                        <button type="button" className='bg-red-500 hover:bg-red-600 hover:text-white transition-all duration-[0.2s] rounded-xl p-1.5 text-xl pr-2 pl-2 mt-3 mb-1.5' onClick={() => { setLesson(false); setNewLesson({ title: '', price: '', videoUrl: '', assignmentUrl: '', viewLimit: 5, viewPrice: 10 }); setImageFile(null); }}>إلغاء</button>
+                        <button type="button" className='bg-red-500 hover:bg-red-600 hover:text-white transition-all duration-[0.2s] rounded-xl p-1.5 text-xl pr-2 pl-2 mt-3 mb-1.5' onClick={() => { setLesson(false); setNewLesson({ title: '', price: '', videoUrl: '', assignmentUrl: '', viewLimit: 5, viewPrice: 10, isHidden: false }); setImageFile(null); }}>إلغاء</button>
                     </div>
                 </form>
             </div>
