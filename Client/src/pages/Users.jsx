@@ -159,13 +159,15 @@ export default function Users() {
         if (Array.isArray(user.purchasedLessons)) {
             user.purchasedLessons.forEach(l => {
                 if (l.lessonId) {
-                    userLessonActivations[l.lessonId] = { video: !!l.video, assignment: !!l.assignment };
+                    userLessonActivations[l.lessonId] = { video: !!l.video };
                 }
             });
         }
         setLessonActivations(userLessonActivations);
         setSelectedLessons({});
         setShowLessonsFor(null);
+        
+
     };
 
     const handleCourseCheckbox = (courseId) => {
@@ -189,7 +191,7 @@ export default function Users() {
                     if (!course || !course.lessons) return prevActs;
                     const newActs = { ...prevActs };
                     course.lessons.forEach(lesson => {
-                        newActs[lesson._id] = { video: true, assignment: true };
+                        newActs[lesson._id] = { video: true };
                     });
                     return newActs;
                 });
@@ -209,32 +211,53 @@ export default function Users() {
         // تفعيل الدرس الفردي
         setLessonActivations(prev => ({
             ...prev,
-            [lessonId]: { video: true, assignment: true }
+            [lessonId]: { video: true }
         }));
     };
 
     // دوال التحكم في تفعيل الفيديو/الواجب
     const handleLessonActivationCheckbox = (lessonId, type) => {
-        setLessonActivations(prev => ({
-            ...prev,
-            [lessonId]: {
-                ...prev[lessonId],
-                [type]: !prev[lessonId]?.[type]
-            }
-        }));
+        // إلغاء تفعيل الكورس بالكامل إذا كان مفعل
+        const courseId = courses.find(course => 
+            course.lessons && course.lessons.some(lesson => lesson._id === lessonId)
+        )?._id;
+        
+        if (courseId) {
+            setSelectedCourses(prev => prev.filter(id => id !== courseId));
+        }
+        
+        setLessonActivations(prev => {
+            const newState = {
+                ...prev,
+                [lessonId]: {
+                    ...prev[lessonId],
+                    [type]: !prev[lessonId]?.[type]
+                }
+            };
+            return newState;
+        });
     };
 
     // تفعيل/إلغاء تفعيل الدرس بالكامل (فيديو وواجب معًا)
     const handleLessonFullActivationCheckbox = (lessonId) => {
+        // إلغاء تفعيل الكورس بالكامل إذا كان مفعل
+        const courseId = courses.find(course => 
+            course.lessons && course.lessons.some(lesson => lesson._id === lessonId)
+        )?._id;
+        
+        if (courseId) {
+            setSelectedCourses(prev => prev.filter(id => id !== courseId));
+        }
+        
         setLessonActivations(prev => {
-            const isFullyActive = prev[lessonId]?.video && prev[lessonId]?.assignment;
-            return {
+            const isFullyActive = prev[lessonId]?.video;
+            const newState = {
                 ...prev,
                 [lessonId]: {
-                    video: !isFullyActive,
-                    assignment: !isFullyActive
+                    video: !isFullyActive
                 }
             };
+            return newState;
         });
     };
 
@@ -246,17 +269,18 @@ export default function Users() {
         if (!activateUser) return;
         let data = { active: true };
         
-        // إرسال الكورسات المختارة
-        data.courseIds = selectedCourses.map(c => typeof c === 'object' ? c._id : c);
+        // إرسال الكورسات المختارة فقط إذا وجدت
+        if (selectedCourses.length > 0) {
+            data.courseIds = selectedCourses.map(c => typeof c === 'object' ? c._id : c);
+        }
         
         // تجهيز تفعيل الدروس الفردية
         const activationsArr = [];
         Object.entries(lessonActivations).forEach(([lessonId, act]) => {
-            if (act.video || act.assignment) {
+            if (act.video) {
                 activationsArr.push({
                     lessonId,
-                    video: !!act.video,
-                    assignment: !!act.assignment
+                    video: !!act.video
                 });
             }
         });
@@ -264,20 +288,75 @@ export default function Users() {
         // إرسال تفعيل الدروس إذا وجد
         if (activationsArr.length > 0) {
             data.lessonActivations = activationsArr;
+            
+            // إضافة امتحان الدرس السابق بنسبة 50% لكل درس مفعل
+            const examScores = [];
+            activationsArr.forEach(activation => {
+                const lessonId = activation.lessonId;
+                // البحث عن الكورس الذي يحتوي على هذا الدرس
+                const course = courses.find(c => 
+                    c.lessons && c.lessons.some(lesson => lesson._id === lessonId)
+                );
+                if (course) {
+                    const lessonIndex = course.lessons.findIndex(lesson => lesson._id === lessonId);
+                    if (lessonIndex > 0) {
+                        // إضافة امتحان الدرس السابق بنسبة 50%
+                        const previousLessonId = course.lessons[lessonIndex - 1]._id;
+                        examScores.push({
+                            examId: previousLessonId,
+                            lessonId: previousLessonId,
+                            score: 50,
+                            total: 100,
+                            passed: true
+                        });
+                    }
+                }
+            });
+            
+            if (examScores.length > 0) {
+                data.examScores = examScores;
+                console.log('Exam scores to send:', examScores);
+            }
         }
 
+
+
         try {
+            console.log('Sending data to:', `${API_BASE_URL}/api/users/${activateUser._id}`);
+            console.log('Data being sent:', data);
             const res = await axios.put(`${API_BASE_URL}/api/users/${activateUser._id}`, data);
             setUsers(users => users.map(u => u._id === activateUser._id ? { ...u, ...res.data } : u));
+            
+            // تحديث lessonActivations بناءً على البيانات الجديدة
+            const updatedUser = res.data;
+            const newLessonActivations = {};
+            if (Array.isArray(updatedUser.purchasedLessons)) {
+                updatedUser.purchasedLessons.forEach(l => {
+                    if (l.lessonId) {
+                        newLessonActivations[l.lessonId] = { video: !!l.video };
+                    }
+                });
+            }
+            setLessonActivations(newLessonActivations);
+            
             setShowActivateModal(false);
             setActivateUser(null);
             
-            // إعادة تحميل فوري لتحديث البيانات
-            setTimeout(() => {
-                window.location.reload();
-            }, 500);
+            // إعادة تحميل البيانات من الـ backend بدلاً من reload الصفحة
+            const headers = getAuthHeaders();
+            axios.get(`${API_BASE_URL}/api/users`, { headers })
+                .then(res => {
+                    setUsers(res.data);
+                    // إضافة تأخير صغير لضمان تحديث البيانات
+                    setTimeout(() => {
+                        setUsers(res.data);
+                    }, 100);
+                })
+                .catch(() => setUsers([]));
         } catch (err) {
-            alert('حدث خطأ أثناء تفعيل المستخدم');
+            console.error('Error activating user:', err);
+            console.error('Error response:', err.response?.data);
+            alert('حدث خطأ أثناء تفعيل المستخدم: ' + (err.response?.data?.message || err.message));
         }
     };
 
@@ -434,26 +513,17 @@ export default function Users() {
                                                     {/* Checkbox رئيسي لتفعيل الدرس بالكامل */}
                                                     <input
                                                         type="checkbox"
-                                                        checked={!!lessonActivations[lesson._id]?.video && !!lessonActivations[lesson._id]?.assignment}
-                                                        indeterminate={(!lessonActivations[lesson._id]?.video && lessonActivations[lesson._id]?.assignment) || (lessonActivations[lesson._id]?.video && !lessonActivations[lesson._id]?.assignment)}
+                                                        checked={!!lessonActivations[lesson._id]?.video || (activateUser && activateUser.purchasedLessons && activateUser.purchasedLessons.some(l => l.lessonId && l.lessonId.toString() === lesson._id.toString() && l.video))}
                                                         onChange={() => handleLessonFullActivationCheckbox(lesson._id)}
                                                     />
                                                     <span>{lesson.title}</span>
                                                     <label className="flex items-center gap-1">
                                                         <input
                                                             type="checkbox"
-                                                            checked={!!lessonActivations[lesson._id]?.video}
+                                                            checked={!!lessonActivations[lesson._id]?.video || (activateUser && activateUser.purchasedLessons && activateUser.purchasedLessons.some(l => l.lessonId && l.lessonId.toString() === lesson._id.toString() && l.video))}
                                                             onChange={() => handleLessonActivationCheckbox(lesson._id, 'video')}
                                                         />
                                                         <span>فيديو الحصة</span>
-                                                    </label>
-                                                    <label className="flex items-center gap-1">
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={!!lessonActivations[lesson._id]?.assignment}
-                                                            onChange={() => handleLessonActivationCheckbox(lesson._id, 'assignment')}
-                                                        />
-                                                        <span>الواجب</span>
                                                     </label>
                                                 </div>
                                             ))}
