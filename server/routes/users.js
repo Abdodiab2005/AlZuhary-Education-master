@@ -69,10 +69,8 @@ router.put('/:id', async (req, res) => {
         if (Array.isArray(req.body.courseIds)) {
           // استبدال الكورسات بالكامل بما تم اختياره فقط (حتى لو كانت مشتراة أونلاين)
           user.purchasedCourses = req.body.courseIds.map(id => new mongoose.Types.ObjectId(id));
-        } else {
-          // إذا لم يتم إرسال courseIds، أزل كل الكورسات (إلغاء التفعيل حتى لو كانت مشتراة)
-          user.purchasedCourses = [];
         }
+        // إذا لم يتم إرسال courseIds، لا تغير الكورسات الموجودة (للحفاظ على الدروس المنفردة)
         // دمج الدروس الجديدة مع القديمة
         let oldLessons = Array.isArray(user.purchasedLessons) ? user.purchasedLessons.slice() : [];
         oldLessons = oldLessons.map(l => {
@@ -94,17 +92,57 @@ router.put('/:id', async (req, res) => {
           const idStr = act.lessonId.toString();
           if (lessonsMap[idStr]) {
             lessonsMap[idStr].video = !!act.video;
-            lessonsMap[idStr].assignment = !!act.assignment;
+            lessonsMap[idStr].assignment = true; // الواجب متاح دائماً
           } else {
             lessonsMap[idStr] = {
               lessonId: new mongoose.Types.ObjectId(act.lessonId),
               video: !!act.video,
-              assignment: !!act.assignment
+              assignment: true // الواجب متاح دائماً
             };
           }
         });
         // احذف الدروس التي لم يعد لها أي تفعيل (حتى لو كانت مشتراة)
-        user.purchasedLessons = Object.values(lessonsMap).filter(l => l.video || l.assignment);
+        user.purchasedLessons = Object.values(lessonsMap).filter(l => l.video);
+      }
+
+      // إضافة امتحانات الدرس السابق بنسبة 50% إذا تم إرسالها
+      console.log('Exam scores received:', req.body.examScores);
+      if (Array.isArray(req.body.examScores) && req.body.examScores.length > 0) {
+        req.body.examScores.forEach(examScore => {
+          try {
+            const examId = examScore.examId || examScore.lessonId;
+            if (examId && mongoose.Types.ObjectId.isValid(examId)) {
+              // البحث عن امتحان موجود أو إنشاء جديد
+              const existingScoreIndex = user.examScores.findIndex(score => 
+                score.examId && score.examId.toString() === examId.toString()
+              );
+              
+              if (existingScoreIndex >= 0) {
+                // تحديث الامتحان الموجود
+                user.examScores[existingScoreIndex] = {
+                  examId: new mongoose.Types.ObjectId(examId),
+                  lessonId: new mongoose.Types.ObjectId(examScore.lessonId || examId),
+                  score: examScore.score || 50,
+                  total: examScore.total || 100,
+                  passed: examScore.passed || true,
+                  date: new Date()
+                };
+              } else {
+                // إضافة امتحان جديد
+                user.examScores.push({
+                  examId: new mongoose.Types.ObjectId(examId),
+                  lessonId: new mongoose.Types.ObjectId(examScore.lessonId || examId),
+                  score: examScore.score || 50,
+                  total: examScore.total || 100,
+                  passed: examScore.passed || true,
+                  date: new Date()
+                });
+              }
+            }
+          } catch (err) {
+            console.error('Error processing exam score:', err);
+          }
+        });
       }
 
  if (Array.isArray(req.body.courseIds)) {
