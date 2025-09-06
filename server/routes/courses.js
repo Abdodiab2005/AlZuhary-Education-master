@@ -459,8 +459,29 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
       lesson.image = `/uploads/${req.file.filename}`;
     }
     
+    // حفظ سريع
     await course.save();
-    res.json(lesson);
+
+    // تحديث ذري إضافي عند إرسال الحقول المنطقية لضمان الكتابة حتى لو اختلفت طبعات السيرفر
+    const sets = {};
+    if (req.body.previousLessonRequired !== undefined) {
+      const raw = req.body.previousLessonRequired;
+      const val = (raw === true || raw === 'true' || raw === 1 || raw === '1') ? true : false;
+      sets['lessons.$.previousLessonRequired'] = val;
+    }
+    if (req.body.hasExam !== undefined) {
+      const raw = req.body.hasExam;
+      const val = (raw === true || raw === 'true' || raw === 1 || raw === '1') ? true : false;
+      sets['lessons.$.hasExam'] = val;
+    }
+    if (Object.keys(sets).length > 0) {
+      await Course.updateOne({ _id: req.params.courseId, 'lessons._id': req.params.lessonId }, { $set: sets });
+    }
+
+    // إعادة الجلب لضمان إرسال آخر نسخة
+    const fresh = await Course.findById(req.params.courseId);
+    const freshLesson = fresh.lessons.id(req.params.lessonId);
+    res.json(freshLesson);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
