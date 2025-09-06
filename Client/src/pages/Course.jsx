@@ -38,6 +38,7 @@ export default function Course() {
     const [forceUpdate, setForceUpdate] = useState(0);
     const [lessonStatuses, setLessonStatuses] = useState({});
     const [viewInputs, setViewInputs] = useState({});
+    const [syncingLessons, setSyncingLessons] = useState(new Set());
 
     // فحص courseId
 
@@ -116,13 +117,13 @@ export default function Course() {
                 });
         }
         
-        // تحديث تلقائي كل 30 ثانية للتأكد من تحديث البيانات
+        // تحديث تلقائي كل دقيقة واحدة فقط
         const interval = setInterval(() => {
             const token = localStorage.getItem('token');
             if (token && courseId) {
                 refreshData();
             }
-        }, 30000);
+        }, 60000);
         
         return () => clearInterval(interval);
     }, [courseId]);
@@ -150,10 +151,10 @@ export default function Course() {
                                 const previousExamScore = examScores.find(score => 
                                     score.lessonId && score.lessonId.toString() === previousLessonId.toString()
                                 );
-                                const canAccess = previousExamScore ? previousExamScore.score >= 50 : false;
+                                const canAccess = previousExamScore ? previousExamScore.score >= 50 : true;
                                 statuses[lesson._id] = { canAccessLesson: canAccess };
                             } else {
-                                statuses[lesson._id] = { canAccessLesson: false };
+                                statuses[lesson._id] = { canAccessLesson: true };
                             }
                         }
                     }
@@ -260,6 +261,85 @@ export default function Course() {
         setLessonStatuses(statuses);
     }, [courseId, lessons]);
 
+    // دالة تحديث previousLessonRequired للدرس - تحديث لحظي
+    const handleTogglePreviousLessonRequired = async (lessonId, required) => {
+        console.log('handleTogglePreviousLessonRequired called:', { lessonId, required, courseId });
+        
+        // التحقق من صحة البيانات
+        if (!lessonId) {
+            console.error('lessonId is missing');
+            return;
+        }
+        
+        if (!courseId) {
+            console.error('courseId is missing');
+            return;
+        }
+        
+        // تحديث فوري في الواجهة - بدون انتظار
+            setLessons(prevLessons => {
+                const updatedLessons = prevLessons.map(lesson => 
+                    lesson._id === lessonId 
+                    ? { ...lesson, previousLessonRequired: required }
+                        : lesson
+                );
+                return updatedLessons;
+            });
+            
+        // تحديث الخادم في الخلفية - بدون انتظار
+        const updateServer = async () => {
+            // إضافة مؤشر المزامنة
+            setSyncingLessons(prev => new Set([...prev, lessonId]));
+            
+            try {
+                const headers = getAuthHeaders();
+                console.log('Sending background request to:', `${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}/previous-lesson-required`);
+                
+                const response = await axios.put(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}/previous-lesson-required`, {
+                    previousLessonRequired: required
+                }, { 
+                    headers,
+                    timeout: 10000 // 10 ثواني فقط للخادم
+                });
+                
+                console.log('Background update successful:', response.data);
+                
+                // تحديث حالة الدروس بعد النجاح
+                updateLessonStatuses();
+                
+            } catch (err) {
+                console.error('Background update failed:', err);
+                
+                // إعادة تعيين الحالة في حالة الخطأ
+                setLessons(prevLessons => 
+                    prevLessons.map(lesson => 
+                        lesson._id === lessonId 
+                            ? { ...lesson, previousLessonRequired: !required }
+                            : lesson
+                    )
+                );
+                
+                // إظهار رسالة خطأ صامتة
+                if (err.response?.status === 401 || err.response?.status === 403) {
+                    console.log('Session expired, redirecting to login');
+                    navigate('/login');
+                } else {
+                    console.log('Update failed, reverting change');
+                }
+            } finally {
+                // إزالة مؤشر المزامنة
+                setSyncingLessons(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(lessonId);
+                    return newSet;
+                });
+            }
+        };
+        
+        // تشغيل التحديث في الخلفية
+        updateServer();
+    };
+
     // تحديث lessonStatuses عند تغيير examScores
     useEffect(() => {
         if (examScores.length > 0 && lessons.length > 0) {
@@ -323,10 +403,10 @@ export default function Course() {
                                 const previousExamScore = examScores.find(score => 
                                     score.lessonId && score.lessonId.toString() === previousLessonId.toString()
                                 );
-                                const canAccess = previousExamScore ? previousExamScore.score >= 50 : false;
+                                const canAccess = previousExamScore ? previousExamScore.score >= 50 : true;
                                 statuses[lesson._id] = { canAccessLesson: canAccess };
                             } else {
-                                statuses[lesson._id] = { canAccessLesson: false };
+                                statuses[lesson._id] = { canAccessLesson: true };
                             }
                         }
                     }
@@ -940,7 +1020,8 @@ export default function Course() {
                                 )}
                                                                  {/* Edit Lesson Data */}
                                  {(userType === 'Admin' || userType === 'Teacher') && (
-                                     <div className='absolute top-1 right-2 flex gap-1'>
+                                     <div className='absolute top-1 right-2 flex flex-col gap-1'>
+                                         <div className='flex gap-1'>
                                          <button 
                                              className={`p-2 rounded-xl text-white text-xl md:text-2xl font-GraphicSchool transition-colors ${
                                                  (lesson.isHidden || false)
@@ -953,6 +1034,34 @@ export default function Course() {
                                              {(lesson.isHidden || false) ? '👁' : '🚫'}
                                          </button>
                                          <button className='p-2 rounded-xl bg-bluetheme-500 text-white text-xl md:text-2xl font-GraphicSchool hover:bg-blue-600 transition-colors' onClick={() => handleEditClick(lesson)}><MdEdit /></button>
+                                     </div>
+                                         {/* Checkbox متطلب الحصة السابقة */}
+                                         <div className='bg-white rounded-lg p-2 shadow-lg border border-gray-300'>
+                                             <div className='flex items-center gap-2'>
+                                                 <input
+                                                     type="checkbox"
+                                                     id={`previousLessonRequired-${lesson._id}`}
+                                                     checked={lesson.previousLessonRequired === true}
+                                                     onChange={(e) => {
+                                                         console.log('Checkbox changed:', { lessonId: lesson._id, checked: e.target.checked });
+                                                         handleTogglePreviousLessonRequired(lesson._id, e.target.checked);
+                                                     }}
+                                                     className='w-4 h-4 text-bluetheme-500 rounded focus:ring-bluetheme-500'
+                                                 />
+                                                 <label 
+                                                     htmlFor={`previousLessonRequired-${lesson._id}`} 
+                                                     className='text-xs font-bold cursor-pointer text-bluetheme-500 flex items-center gap-1'
+                                                 >
+                                                     {lesson.previousLessonRequired === true
+                                                         ? 'مطلوب نجاح سابق' 
+                                                         : 'مفتوح للجميع'
+                                                     }
+                                                     {syncingLessons.has(lesson._id) && (
+                                                         <span className='text-xs text-gray-400 animate-pulse'>🔄</span>
+                                                     )}
+                                                 </label>
+                                         </div>
+                                         </div>
                                      </div>
                                  )}
 
@@ -990,39 +1099,28 @@ export default function Course() {
                                                     // الدرس الأول متاح دائماً إذا كان مشترى أو مجاني
                                                     canAccess = true;
                                                 } else {
-                                                    // للدروس الأخرى، نتحقق من نجاح امتحان الدرس السابق
-                                                    const currentLessonId = lesson._id;
-                                                    if (currentLessonId) {
-                                                        // منطق بسيط: إذا كان الدرس مش الأول، يطلب النجاح في الامتحان السابق
-                                                        if (lessonIndex === 0) {
-                                                            // الدرس الأول يفتح مباشرة
-                                                            canAccess = true;
-                                                        } else {
-                                                            // أي درس تاني - نتحقق من وجود امتحان سابق
-                                                            const lessonStatus = lessonStatuses[currentLessonId];
-                                                            const hasPreviousExam = lessonStatus && lessonStatus.canTakePreviousExam;
-                                                            
-                                                            if (hasPreviousExam) {
-                                                                // البحث في examScores للدرس السابق
-                                                                const previousLessonId = lessons[lessonIndex - 1]?._id;
-                                                                const examScore = examScores.find(score => {
-                                                                    if (typeof score === 'object' && score.lessonId) {
-                                                                        return score.lessonId.toString() === previousLessonId.toString();
-                                                                    }
-                                                                    return false;
-                                                                });
-                                                                
-                                                                // إذا كان فيه امتحان سابق، يطلب النجاح فيه
-                                                                if (examScore) {
-                                                                    const percentage = (examScore.score / examScore.total) * 100;
-                                                                    canAccess = percentage >= 50;
-                                                                } else {
-                                                                    canAccess = false;
+                                                    // للدروس الأخرى، نتحقق من متطلب الحصة السابقة للدرس الحالي
+                                                    if (lesson.previousLessonRequired === false) {
+                                                        // إذا كان متطلب الحصة السابقة معطل للدرس الحالي، فتح الدرس مباشرة
+                                                        canAccess = true;
+                                                    } else {
+                                                        // للدروس الأخرى، نتحقق من نجاح امتحان الدرس السابق
+                                                        const previousLessonId = lessons[lessonIndex - 1]?._id;
+                                                        if (previousLessonId) {
+                                                            // البحث في examScores للدرس السابق
+                                                            const examScore = examScores.find(score => {
+                                                                if (typeof score === 'object' && score.lessonId) {
+                                                                    return score.lessonId.toString() === previousLessonId.toString();
                                                                 }
-                                                            } else {
-                                                                // إذا مفيش امتحان سابق، يجب أن يكون مقفل حتى ينجح في الحصة السابقة
-                                                                canAccess = false;
-                                                            }
+                                                                return false;
+                                                            });
+                                                           
+                                                            // حساب النسبة المئوية
+                                                            const percentage = examScore ? (examScore.score / examScore.total) * 100 : 0;
+                                                            canAccess = examScore && percentage >= 50;
+                                                        } else {
+                                                            // إذا لم يكن هناك درس سابق، فتح الدرس
+                                                            canAccess = true;
                                                         }
                                                     }
                                                 }
@@ -1030,7 +1128,6 @@ export default function Course() {
                                                 // إذا لم يكن الدرس مشترى، لا يمكن الوصول له
                                                 canAccess = false;
                                             }
-                                            
                                             
                                             // إذا كان يمكن الوصول للدرس، نعرض زر الدخول
                                             if (canAccess) {
@@ -1091,10 +1188,7 @@ export default function Course() {
                                             }
                                             
                                             // إذا كان الدرس مشترى ولكن لا يمكن الوصول له (لم ينجح في الامتحان السابق)
-                                            if ((isLessonPurchased || lesson.price === 0) && !canAccess) {
-                                                const previousLesson = lessons[lessonIndex - 1];
-                                                const previousLessonTitle = previousLesson ? previousLesson.title : 'الحصة السابقة';
-                                                
+                                            if (isLessonPurchased || lesson.price === 0) {
                                                 return (
                                                     <div className='flex flex-col items-center gap-2'>
                                                         <div className='bg-amber-100 border-2 border-amber-400 rounded-lg p-3 text-center max-w-[200px]'>

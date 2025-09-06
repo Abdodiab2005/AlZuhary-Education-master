@@ -73,6 +73,7 @@ export default function Admin_set_test() {
         }
     }, [selectedCourse, courses]);
 
+
     useEffect(() => {
         // عند تغيير الكورس أو الدرس، جلب الامتحانات الموجودة
         if (selectedCourse && selectedLesson && !isLoading) {
@@ -351,6 +352,7 @@ export default function Admin_set_test() {
         });
     }
 
+
     // أضف دالة إضافة سؤال:
     function handleAddQuestion() {
         setQuestions([...questions, {
@@ -401,6 +403,7 @@ export default function Admin_set_test() {
                     onChange={e => setExamName(e.target.value)}
                 />
                 
+
                                  {/* اختيار نوع الامتحان - أزرار تحديد */}
                  <div className="flex gap-2 items-center">
                      <label className="text-bluetheme-500 text-xl font-bold">نوع الامتحان:</label>
