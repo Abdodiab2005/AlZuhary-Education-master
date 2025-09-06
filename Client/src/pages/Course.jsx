@@ -294,10 +294,10 @@ export default function Course() {
                 
                 const url = `${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`;
                 console.log('Saving previousLessonRequired to:', url);
-                const response = await axios.put(url, {
-                    previousLessonRequired: required
-                }, { 
-                    headers: { ...headers, 'Content-Type': 'application/json' },
+                const form = new FormData();
+                form.append('previousLessonRequired', String(required));
+                const response = await axios.put(url, form, { 
+                    headers: { ...headers, 'Content-Type': 'multipart/form-data' },
                     timeout: 30000
                 });
                 console.log('Saved previousLessonRequired on server:', response.data);
@@ -348,9 +348,9 @@ export default function Course() {
             const headers = getAuthHeaders();
             const url = `${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`;
             console.log('Saving hasExam to:', url);
-            await axios.put(url, {
-                hasExam
-            }, { headers: { ...headers, 'Content-Type': 'application/json' }, timeout: 30000 });
+            const form = new FormData();
+            form.append('hasExam', String(hasExam));
+            await axios.put(url, form, { headers: { ...headers, 'Content-Type': 'multipart/form-data' }, timeout: 30000 });
             console.log('Saved hasExam on server:', { lessonId, hasExam });
             // تم الحفظ بنجاح في الخلفية بدون إعادة حساب فورية
         } catch (err) {
