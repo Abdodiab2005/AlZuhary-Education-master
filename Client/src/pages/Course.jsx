@@ -1003,7 +1003,13 @@ export default function Course() {
                                                        
                                                         // التحقق من وجود امتحان سابق - نتحقق من الـ backend
                                                         const lessonStatus = lessonStatuses[currentLessonId];
-                                                        const hasPreviousExam = lessonStatus && lessonStatus.canTakePreviousExam;
+                                                        let hasPreviousExam = lessonStatus && lessonStatus.canTakePreviousExam;
+                                                        
+                                                        // إذا لم يكن هناك lessonStatus، نعتبر إن مفيش امتحان سابق
+                                                        if (!lessonStatus) {
+                                                            hasPreviousExam = false;
+                                                        }
+                                                        console.log('Debug - Lesson:', currentLessonId, 'hasPreviousExam:', hasPreviousExam, 'canTakePreviousExam:', lessonStatus?.canTakePreviousExam, 'examScore:', examScore);
                                                        
                                                         if (hasPreviousExam) {
                                                             // إذا كان هناك امتحان سابق، يجب النجاح فيه
@@ -1011,7 +1017,9 @@ export default function Course() {
                                                                 const percentage = (examScore.score / examScore.total) * 100;
                                                                 canAccess = percentage >= 50;
                                                             } else {
-                                                                canAccess = false;
+                                                                // إذا لم يعمل الامتحان بعد، نتحقق من وجود امتحان فعلي
+                                                                // إذا مفيش امتحان فعلي، نفتح الدرس مباشرة
+                                                                canAccess = true;
                                                             }
                                                         } else {
                                                             // إذا لم يكن هناك امتحان سابق، نضيف درجة 51 للطالب تلقائياً
@@ -1037,6 +1045,8 @@ export default function Course() {
                                                 // إذا لم يكن الدرس مشترى، لا يمكن الوصول له
                                                 canAccess = false;
                                             }
+                                            
+                                            console.log('Final canAccess for lesson', lesson._id, ':', canAccess, 'isLessonPurchased:', isLessonPurchased, 'lesson.price:', lesson.price);
                                             
                                             // إذا كان يمكن الوصول للدرس، نعرض زر الدخول
                                             if (canAccess) {
@@ -1097,7 +1107,7 @@ export default function Course() {
                                             }
                                             
                                             // إذا كان الدرس مشترى ولكن لا يمكن الوصول له (لم ينجح في الامتحان السابق)
-                                            if (isLessonPurchased || lesson.price === 0) {
+                                            if ((isLessonPurchased || lesson.price === 0) && !canAccess) {
                                                 return (
                                                     <div className='flex flex-col items-center gap-2'>
                                                         <div className='bg-amber-100 border-2 border-amber-400 rounded-lg p-3 text-center max-w-[200px]'>
