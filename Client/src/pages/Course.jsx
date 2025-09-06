@@ -1001,9 +1001,9 @@ export default function Course() {
                                                             return false;
                                                         });
                                                        
-                                                        // التحقق من وجود امتحان سابق - نتحقق من وجود زر "امتحان الحصة السابقة" في الواجهة
+                                                        // التحقق من وجود امتحان سابق - نتحقق من الـ backend
                                                         const lessonStatus = lessonStatuses[currentLessonId];
-                                                        const hasPreviousExam = lessonIndex > 0; // أي درس غير الأول له امتحان سابق افتراضياً
+                                                        const hasPreviousExam = lessonStatus && lessonStatus.canTakePreviousExam;
                                                        
                                                         if (hasPreviousExam) {
                                                             // إذا كان هناك امتحان سابق، يجب النجاح فيه
@@ -1014,9 +1014,22 @@ export default function Course() {
                                                                 canAccess = false;
                                                             }
                                                         } else {
-                                                            // إذا لم يكن هناك امتحان سابق، يعتبر pass تلقائياً
-                                                            const percentage = 51;
-                                                            canAccess = percentage >= 50;
+                                                            // إذا لم يكن هناك امتحان سابق، نضيف درجة 51 للطالب تلقائياً
+                                                            if (!examScore) {
+                                                                // إضافة درجة 51 للطالب في قاعدة البيانات
+                                                                const token = localStorage.getItem('token');
+                                                                if (token) {
+                                                                    axios.post(`${API_BASE_URL}/api/exams/auto-pass/${currentLessonId}`, {}, {
+                                                                        headers: { Authorization: `Bearer ${token}` }
+                                                                    }).then(() => {
+                                                                        // تحديث البيانات بعد إضافة الدرجة
+                                                                        refreshData();
+                                                                    }).catch(err => {
+                                                                        console.error('Error adding auto-pass score:', err);
+                                                                    });
+                                                                }
+                                                            }
+                                                            canAccess = true;
                                                         }
                                                     }
                                                 }
