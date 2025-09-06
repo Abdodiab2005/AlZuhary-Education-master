@@ -150,10 +150,10 @@ export default function Course() {
                                 const previousExamScore = examScores.find(score => 
                                     score.lessonId && score.lessonId.toString() === previousLessonId.toString()
                                 );
-                                const canAccess = previousExamScore ? previousExamScore.score >= 50 : true;
+                                const canAccess = previousExamScore ? previousExamScore.score >= 50 : false;
                                 statuses[lesson._id] = { canAccessLesson: canAccess };
                             } else {
-                                statuses[lesson._id] = { canAccessLesson: true };
+                                statuses[lesson._id] = { canAccessLesson: false };
                             }
                         }
                     }
@@ -323,10 +323,10 @@ export default function Course() {
                                 const previousExamScore = examScores.find(score => 
                                     score.lessonId && score.lessonId.toString() === previousLessonId.toString()
                                 );
-                                const canAccess = previousExamScore ? previousExamScore.score >= 50 : true;
+                                const canAccess = previousExamScore ? previousExamScore.score >= 50 : false;
                                 statuses[lesson._id] = { canAccessLesson: canAccess };
                             } else {
-                                statuses[lesson._id] = { canAccessLesson: true };
+                                statuses[lesson._id] = { canAccessLesson: false };
                             }
                         }
                     }
@@ -990,17 +990,9 @@ export default function Course() {
                                                     // الدرس الأول متاح دائماً إذا كان مشترى أو مجاني
                                                     canAccess = true;
                                                 } else {
-                                                    // للدروس الأخرى، نتحقق من نجاح امتحان الدرس نفسه (السابق)
+                                                    // للدروس الأخرى، نتحقق من نجاح امتحان الدرس السابق
                                                     const currentLessonId = lesson._id;
                                                     if (currentLessonId) {
-                                                        // البحث في examScores
-                                                        const examScore = examScores.find(score => {
-                                                            if (typeof score === 'object' && score.lessonId) {
-                                                                return score.lessonId.toString() === currentLessonId.toString();
-                                                            }
-                                                            return false;
-                                                        });
-                                                       
                                                         // منطق بسيط: إذا كان الدرس مش الأول، يطلب النجاح في الامتحان السابق
                                                         if (lessonIndex === 0) {
                                                             // الدرس الأول يفتح مباشرة
@@ -1011,6 +1003,15 @@ export default function Course() {
                                                             const hasPreviousExam = lessonStatus && lessonStatus.canTakePreviousExam;
                                                             
                                                             if (hasPreviousExam) {
+                                                                // البحث في examScores للدرس السابق
+                                                                const previousLessonId = lessons[lessonIndex - 1]?._id;
+                                                                const examScore = examScores.find(score => {
+                                                                    if (typeof score === 'object' && score.lessonId) {
+                                                                        return score.lessonId.toString() === previousLessonId.toString();
+                                                                    }
+                                                                    return false;
+                                                                });
+                                                                
                                                                 // إذا كان فيه امتحان سابق، يطلب النجاح فيه
                                                                 if (examScore) {
                                                                     const percentage = (examScore.score / examScore.total) * 100;
@@ -1019,8 +1020,8 @@ export default function Course() {
                                                                     canAccess = false;
                                                                 }
                                                             } else {
-                                                                // إذا مفيش امتحان سابق، يفتح مباشرة
-                                                                canAccess = true;
+                                                                // إذا مفيش امتحان سابق، يجب أن يكون مقفل حتى ينجح في الحصة السابقة
+                                                                canAccess = false;
                                                             }
                                                         }
                                                     }
@@ -1091,6 +1092,9 @@ export default function Course() {
                                             
                                             // إذا كان الدرس مشترى ولكن لا يمكن الوصول له (لم ينجح في الامتحان السابق)
                                             if ((isLessonPurchased || lesson.price === 0) && !canAccess) {
+                                                const previousLesson = lessons[lessonIndex - 1];
+                                                const previousLessonTitle = previousLesson ? previousLesson.title : 'الحصة السابقة';
+                                                
                                                 return (
                                                     <div className='flex flex-col items-center gap-2'>
                                                         <div className='bg-amber-100 border-2 border-amber-400 rounded-lg p-3 text-center max-w-[200px]'>
