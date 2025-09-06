@@ -297,8 +297,8 @@ export default function Course() {
                 const response = await axios.put(url, {
                     previousLessonRequired: required
                 }, { 
-                    headers,
-                    timeout: 10000
+                    headers: { ...headers, 'Content-Type': 'application/json' },
+                    timeout: 30000
                 });
                 console.log('Saved previousLessonRequired on server:', response.data);
                 // تم الحفظ بنجاح في الخلفية بدون إعادة حساب فورية
@@ -350,7 +350,7 @@ export default function Course() {
             console.log('Saving hasExam to:', url);
             await axios.put(url, {
                 hasExam
-            }, { headers, timeout: 10000 });
+            }, { headers: { ...headers, 'Content-Type': 'application/json' }, timeout: 30000 });
             console.log('Saved hasExam on server:', { lessonId, hasExam });
             // تم الحفظ بنجاح في الخلفية بدون إعادة حساب فورية
         } catch (err) {
