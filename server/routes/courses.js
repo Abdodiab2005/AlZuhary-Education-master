@@ -722,22 +722,52 @@ router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async
       });
     }
 
-    // التحقق من نجاح امتحان الدرس السابق (إذا لم يكن مفعل)
+    // التحقق من نجاح امتحان الدرس السابق
     const previousLesson = lessons[currentLessonIndex - 1];
     if (previousLesson) {
-      const previousExamScore = user.examScores.find(score => 
-        score.lessonId && score.lessonId.toString() === previousLesson._id.toString()
-      );
-      
-      if (previousExamScore) {
-        const percentage = (previousExamScore.score / previousExamScore.total) * 100;
-        if (percentage >= 50) {
+      // التحقق من متطلب الحصة السابقة للدرس الحالي
+      if (lesson.previousLessonRequired === false) {
+        // إذا كان متطلب الحصة السابقة معطل للدرس الحالي، فتح الدرس مباشرة
+        return res.json({ 
+          canAccess: true, 
+          reason: 'Previous lesson requirement disabled for this lesson - lesson open to all'
+        });
+      }
+
+      // التحقق من وجود امتحان في الدرس السابق
+      if (previousLesson.hasExam === true) {
+        const previousExamScore = user.examScores.find(score => 
+          score.lessonId && score.lessonId.toString() === previousLesson._id.toString()
+        );
+        
+        if (previousExamScore) {
+          const percentage = (previousExamScore.score / previousExamScore.total) * 100;
+          if (percentage >= 50) {
+            return res.json({ 
+              canAccess: true, 
+              reason: 'Previous exam passed',
+              examScore: percentage
+            });
+          }
+        } else {
+          // إذا لم يكن هناك درجة للامتحان، مقفل حتى ينجح في الامتحان
           return res.json({ 
-            canAccess: true, 
-            reason: 'Previous exam passed',
-            examScore: percentage
+            canAccess: false, 
+            reason: 'No previous exam score - must pass exam first'
           });
         }
+      } else if (previousLesson.hasExam === false) {
+        // إذا كان hasExam = false صراحة، يفتح مباشرة
+        return res.json({ 
+          canAccess: true, 
+          reason: 'No previous exam - auto pass'
+        });
+      } else {
+        // إذا كان hasExam غير محدد (undefined/null)، مقفل افتراضياً
+        return res.json({ 
+          canAccess: false, 
+          reason: 'Lesson access not configured - admin must set hasExam'
+        });
       }
     }
 
@@ -928,20 +958,31 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
     } else {
       // التحقق من نجاح امتحان الدرس السابق بنسبة 50% أو أكثر
       if (previousLessonId) {
-        const previousExamScore = user.examScores.find(score => 
-          score.lessonId && score.lessonId.toString() === previousLessonId.toString()
-        );
+        const previousLesson = lessons[currentLessonIndex - 1];
         
-        if (previousExamScore) {
-          // يمكن الوصول إذا نجح في امتحان الدرس السابق بنسبة 50% أو أكثر
-          canAccessLesson = previousExamScore.score >= 50;
+        // التحقق من وجود امتحان في الدرس السابق
+        if (previousLesson.hasExam === true) {
+          const previousExamScore = user.examScores.find(score => 
+            score.lessonId && score.lessonId.toString() === previousLessonId.toString()
+          );
+          
+          if (previousExamScore) {
+            // يمكن الوصول إذا نجح في امتحان الدرس السابق بنسبة 50% أو أكثر
+            canAccessLesson = previousExamScore.score >= 50;
+          } else {
+            // إذا لم يكن هناك درجة للامتحان، مقفل حتى ينجح في الامتحان
+            canAccessLesson = false;
+          }
+        } else if (previousLesson.hasExam === false) {
+          // إذا كان hasExam = false صراحة، يفتح مباشرة
+          canAccessLesson = true;
         } else {
-          // لا يمكن الوصول إذا لم يكن هناك امتحان للدرس السابق أو لم ينجح فيه
+          // إذا كان hasExam غير محدد (undefined/null)، مقفل افتراضياً
           canAccessLesson = false;
         }
       } else {
-        // إذا لم يكن هناك درس سابق، لا يمكن الوصول
-        canAccessLesson = false;
+        // إذا لم يكن هناك درس سابق، يفتح مباشرة
+        canAccessLesson = true;
       }
     }
 
@@ -959,6 +1000,120 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
 
   } catch (err) {
     console.error('Error in lesson-status:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// تحديث حقل hasExam للدرس
+router.put('/:courseId/lessons/:lessonId/has-exam', authenticateToken, async (req, res) => {
+  try {
+    const { courseId, lessonId } = req.params;
+    const { hasExam } = req.body;
+    
+    console.log('hasExam API called:', { courseId, lessonId, hasExam, userId: req.user.userId });
+    
+    // التحقق من أن المستخدم admin
+    const user = await User.findById(req.user.userId);
+    if (!user || user.userType !== 'Admin') {
+      return res.status(403).json({ message: 'غير مصرح' });
+    }
+    
+    // استخدام updateOne بدلاً من findById + save لتحسين الأداء
+    const result = await Course.updateOne(
+      { 
+        _id: courseId, 
+        'lessons._id': lessonId 
+      },
+      { 
+        $set: { 
+          'lessons.$.hasExam': hasExam 
+        } 
+      }
+    );
+    
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'الكورس أو الدرس غير موجود' });
+    }
+    
+    res.json({ 
+      message: 'تم تحديث حالة الامتحان للدرس بنجاح',
+      hasExam: hasExam
+    });
+    
+  } catch (err) {
+    console.error('Error updating lesson hasExam:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// تحديث حقل previousLessonRequired للدرس
+router.put('/:courseId/lessons/:lessonId/previous-lesson-required', authenticateToken, async (req, res) => {
+  try {
+    const { courseId, lessonId } = req.params;
+    const { previousLessonRequired } = req.body;
+    
+    console.log('previousLessonRequired API called:', { 
+      courseId, 
+      lessonId, 
+      previousLessonRequired, 
+      userId: req.user.userId,
+      body: req.body 
+    });
+    
+    // التحقق من صحة البيانات
+    if (!courseId || !lessonId) {
+      return res.status(400).json({ message: 'معرف الكورس أو الدرس مفقود' });
+    }
+    
+    if (typeof previousLessonRequired !== 'boolean') {
+      return res.status(400).json({ message: 'قيمة previousLessonRequired يجب أن تكون true أو false' });
+    }
+    
+    // التحقق من أن المستخدم admin
+    const user = await User.findById(req.user.userId);
+    if (!user || user.userType !== 'Admin') {
+      return res.status(403).json({ message: 'غير مصرح' });
+    }
+    
+    // التحقق من وجود الكورس والدرس
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: 'الكورس غير موجود' });
+    }
+    
+    const lesson = course.lessons.id(lessonId);
+    if (!lesson) {
+      return res.status(404).json({ message: 'الدرس غير موجود' });
+    }
+    
+    // استخدام updateOne بدلاً من findById + save لتحسين الأداء
+    const result = await Course.updateOne(
+      { 
+        _id: courseId, 
+        'lessons._id': lessonId 
+      },
+      { 
+        $set: { 
+          'lessons.$.previousLessonRequired': previousLessonRequired 
+        } 
+      }
+    );
+    
+    console.log('Update result:', result);
+    
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'الكورس أو الدرس غير موجود' });
+    }
+    
+    res.json({ 
+      message: 'تم تحديث حالة متطلب الحصة السابقة للدرس بنجاح',
+      previousLessonRequired: previousLessonRequired,
+      lessonId: lessonId,
+      courseId: courseId
+    });
+    
+  } catch (err) {
+    console.error('Error updating lesson previousLessonRequired:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
