@@ -722,19 +722,22 @@ router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async
       });
     }
 
-    // التحقق من نجاح امتحان الدرس نفسه (إذا لم يكن مفعل)
-    const examScore = user.examScores.find(score => 
-      score.lessonId && score.lessonId.toString() === lessonId
-    );
-    
-    if (examScore) {
-      const percentage = (examScore.score / examScore.total) * 100;
-      if (percentage >= 50) {
-        return res.json({ 
-          canAccess: true, 
-          reason: 'Exam passed',
-          examScore: percentage
-        });
+    // التحقق من نجاح امتحان الدرس السابق (إذا لم يكن مفعل)
+    const previousLesson = lessons[currentLessonIndex - 1];
+    if (previousLesson) {
+      const previousExamScore = user.examScores.find(score => 
+        score.lessonId && score.lessonId.toString() === previousLesson._id.toString()
+      );
+      
+      if (previousExamScore) {
+        const percentage = (previousExamScore.score / previousExamScore.total) * 100;
+        if (percentage >= 50) {
+          return res.json({ 
+            canAccess: true, 
+            reason: 'Previous exam passed',
+            examScore: percentage
+          });
+        }
       }
     }
 
@@ -923,21 +926,21 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
     } else if (lessonActivation) {
       canAccessLesson = true;
     } else {
-      // التحقق من نجاح امتحان الدرس نفسه (امتحان الدرس السابق) بنسبة 50% أو أكثر
-      const currentLessonId = lessonId;
-      if (currentLessonId) {
-        const currentExamScore = user.examScores.find(score => 
-          score.lessonId && score.lessonId.toString() === currentLessonId.toString()
+      // التحقق من نجاح امتحان الدرس السابق بنسبة 50% أو أكثر
+      if (previousLessonId) {
+        const previousExamScore = user.examScores.find(score => 
+          score.lessonId && score.lessonId.toString() === previousLessonId.toString()
         );
         
-        if (currentExamScore) {
-          // يمكن الوصول إذا نجح في امتحان الدرس نفسه بنسبة 50% أو أكثر
-          canAccessLesson = currentExamScore.score >= 50;
+        if (previousExamScore) {
+          // يمكن الوصول إذا نجح في امتحان الدرس السابق بنسبة 50% أو أكثر
+          canAccessLesson = previousExamScore.score >= 50;
         } else {
-          // لا يمكن الوصول إذا لم يكن هناك امتحان للدرس
+          // لا يمكن الوصول إذا لم يكن هناك امتحان للدرس السابق أو لم ينجح فيه
           canAccessLesson = false;
         }
       } else {
+        // إذا لم يكن هناك درس سابق، لا يمكن الوصول
         canAccessLesson = false;
       }
     }
