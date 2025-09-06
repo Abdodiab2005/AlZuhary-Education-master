@@ -99,11 +99,11 @@ export default function Course() {
             axios.get(`${API_BASE_URL}/api/courses/${courseId}`, { headers })
                 .then(res => {
                     setCourse(res.data);
-                    // إضافة قيمة افتراضية لـ previousLessonRequired
+                    // عدم فرض قيمة افتراضية لـ previousLessonRequired؛ نتركها كما هي من الخادم
                     const lessonsWithDefaults = (res.data.lessons || []).map(lesson => ({
-                        ...lesson,
-                        previousLessonRequired: lesson.previousLessonRequired !== undefined ? lesson.previousLessonRequired : true
+                        ...lesson
                     }));
+                    console.log('Fetched lessons states:', lessonsWithDefaults.map(l => ({ id: l._id, previousLessonRequired: l.previousLessonRequired, hasExam: l.hasExam })));
                     setLessons(lessonsWithDefaults);
                 })
                 .catch(err => {
@@ -268,6 +268,7 @@ export default function Course() {
 
     // دالة تحديث previousLessonRequired للدرس - تحديث لحظي
     const handleTogglePreviousLessonRequired = async (lessonId, required) => {
+        console.log('Toggle previousLessonRequired -> UI immediately:', { lessonId, to: required });
         // التحقق من صحة البيانات
         if (!lessonId || !courseId) {
             return;
@@ -291,15 +292,16 @@ export default function Course() {
             try {
                 const headers = getAuthHeaders();
                 
-                const response = await axios.put(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}/previous-lesson-required`, {
+                const url = `${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`;
+                console.log('Saving previousLessonRequired to:', url);
+                const response = await axios.put(url, {
                     previousLessonRequired: required
                 }, { 
                     headers,
                     timeout: 10000
                 });
-                
-                // تحديث حالة الدروس بعد النجاح
-                updateLessonStatuses();
+                console.log('Saved previousLessonRequired on server:', response.data);
+                // تم الحفظ بنجاح في الخلفية بدون إعادة حساب فورية
                 
             } catch (err) {
                 // إعادة تعيين الحالة في حالة الخطأ
@@ -310,7 +312,7 @@ export default function Course() {
                             : lesson
                     )
                 );
-                
+                console.log('Error saving previousLessonRequired:', err?.response?.data || err?.message);
                 // إظهار رسالة خطأ صامتة
                 if (err.response?.status === 401 || err.response?.status === 403) {
                     navigate('/login');
@@ -328,6 +330,46 @@ export default function Course() {
         // تشغيل التحديث في الخلفية
         updateServer();
     };
+
+    // دالة تحديث حالة وجود الامتحان للدرس - تحديث لحظي
+    const handleToggleHasExam = useCallback(async (lessonId, hasExam) => {
+        console.log('Toggle hasExam -> UI immediately:', { lessonId, to: hasExam });
+        if (!lessonId || !courseId) return;
+
+        // تحديث فوري
+        setLessons(prevLessons => prevLessons.map(lesson => (
+            lesson._id === lessonId ? { ...lesson, hasExam } : lesson
+        )));
+
+        // مؤشر مزامنة
+        setSyncingLessons(prev => new Set([...prev, lessonId]));
+
+        try {
+            const headers = getAuthHeaders();
+            const url = `${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`;
+            console.log('Saving hasExam to:', url);
+            await axios.put(url, {
+                hasExam
+            }, { headers, timeout: 10000 });
+            console.log('Saved hasExam on server:', { lessonId, hasExam });
+            // تم الحفظ بنجاح في الخلفية بدون إعادة حساب فورية
+        } catch (err) {
+            // تراجع في حالة الخطأ
+            setLessons(prevLessons => prevLessons.map(lesson => (
+                lesson._id === lessonId ? { ...lesson, hasExam: !hasExam } : lesson
+            )));
+            console.log('Error saving hasExam:', err?.response?.data || err?.message);
+            if (err.response?.status === 401 || err.response?.status === 403) {
+                navigate('/login');
+            }
+        } finally {
+            setSyncingLessons(prev => {
+                const next = new Set(prev);
+                next.delete(lessonId);
+                return next;
+            });
+        }
+    }, [courseId, navigate, updateLessonStatuses]);
 
     // تحديث lessonStatuses عند تغيير examScores
     useEffect(() => {
@@ -1025,37 +1067,39 @@ export default function Course() {
                                          <button className='p-2 rounded-xl bg-bluetheme-500 text-white text-xl md:text-2xl font-GraphicSchool hover:bg-blue-600 transition-colors' onClick={() => handleEditClick(lesson)}><MdEdit /></button>
                                      </div>
                                          {/* Checkbox متطلب الحصة السابقة */}
-                                         <div className='bg-white rounded-lg p-2 shadow-lg border border-gray-300'>
-                                             <div className='flex items-center gap-2'>
-                                                  <input
-                                                      type="checkbox"
-                                                      id={`previousLessonRequired-${lesson._id}`}
-                                                      checked={lesson.previousLessonRequired}
-                                                      onChange={(e) => {
-                                                          handleTogglePreviousLessonRequired(lesson._id, e.target.checked);
-                                                      }}
-                                                      className='w-4 h-4 text-bluetheme-500 rounded focus:ring-bluetheme-500'
-                                                  />
-                                                  <label 
-                                                      htmlFor={`previousLessonRequired-${lesson._id}`} 
-                                                      className='text-xs font-bold cursor-pointer text-bluetheme-500 flex items-center gap-1'
-                                                  >
-                                                      {lesson.previousLessonRequired
-                                                          ? 'مطلوب نجاح سابق' 
-                                                          : 'مفتوح للجميع'
-                                                      }
-                                                     {syncingLessons.has(lesson._id) && (
-                                                         <span className='text-xs text-gray-400 animate-pulse'>🔄</span>
-                                                     )}
-                                                 </label>
-                                         </div>
-                                         </div>
+                                         {lessonIndex !== 0 && (
+                                             <div className='bg-white rounded-lg p-2 shadow-lg border border-gray-300'>
+                                                 <div className='flex items-center gap-2'>
+                                                      <input
+                                                          type="checkbox"
+                                                          id={`previousLessonRequired-${lesson._id}`}
+                                                          checked={!!lesson.previousLessonRequired}
+                                                          onChange={(e) => {
+                                                              handleTogglePreviousLessonRequired(lesson._id, e.target.checked);
+                                                          }}
+                                                          className='w-4 h-4 text-bluetheme-500 rounded focus:ring-bluetheme-500'
+                                                      />
+                                                      <label 
+                                                          htmlFor={`previousLessonRequired-${lesson._id}`} 
+                                                          className='text-xs font-bold cursor-pointer text-bluetheme-500 flex items-center gap-1'
+                                                      >
+                                                          {lesson.previousLessonRequired
+                                                              ? 'مطلوب نجاح سابق' 
+                                                              : 'مفتوح للجميع'
+                                                          }
+                                                         {syncingLessons.has(lesson._id) && (
+                                                             <span className='text-xs text-gray-400 animate-pulse'>🔄</span>
+                                                         )}
+                                                     </label>
+                                             </div>
+                                             </div>
+                                         )}
                                      </div>
                                  )}
 
-                                
-
-                            </div>
+                                 
+ 
+                             </div>
                             <div className='flex flex-col items-center justify-center p-3 rounded-b-2xl bg-bluetheme-500 gap-2.5 relative w-full lg:rounded-[0] lg:rounded-r-2xl lg:p-1.5 lg:h-full'>
                                 <h2 className='bg-white text-bluetheme-500 p-1.5 lg:p-1 rounded-lg w-[50%] text-center head2'>{lesson.title}</h2>
                                 <span className='bg-white p-1.5 rounded-lg text-center labels'>السعر: {lesson.price} جنيه</span>
