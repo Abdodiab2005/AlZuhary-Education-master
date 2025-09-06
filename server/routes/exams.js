@@ -296,4 +296,52 @@ router.get('/can-access-lesson/:courseId/:lessonId', authenticateToken, async (r
     }
 });
 
+// API لإضافة درجة 51 تلقائياً للطالب إذا لم يكن هناك امتحان سابق
+router.post('/auto-pass/:lessonId', authenticateToken, async (req, res) => {
+    try {
+        const { lessonId } = req.params;
+        const userId = req.user.userId;
+
+        // جلب المستخدم
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'المستخدم غير موجود' });
+        }
+
+        // التحقق من وجود درجة للدرس بالفعل
+        const existingScore = user.examScores.find(score => 
+            score.lessonId && score.lessonId.toString() === lessonId
+        );
+
+        if (existingScore) {
+            // إذا كان هناك درجة موجودة، نرجعها
+            return res.json({ 
+                message: 'الطالب لديه درجة بالفعل', 
+                score: existingScore 
+            });
+        }
+
+        // إضافة درجة 51 تلقائياً
+        const autoScore = {
+            lessonId: lessonId,
+            score: 51,
+            total: 100,
+            passed: true,
+            date: new Date()
+        };
+
+        user.examScores.push(autoScore);
+        await user.save();
+
+        res.json({ 
+            message: 'تم إضافة درجة 51 تلقائياً للطالب', 
+            score: autoScore 
+        });
+
+    } catch (err) {
+        console.error('Error in auto-pass:', err);
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
 module.exports = router; 
