@@ -1001,9 +1001,23 @@ export default function Course() {
                                                             return false;
                                                         });
                                                        
-                                                        // حساب النسبة المئوية
-                                                        const percentage = examScore ? (examScore.score / examScore.total) * 100 : 0;
-                                                        canAccess = examScore && percentage >= 50;
+                                                        // التحقق من وجود امتحان سابق - نتحقق من وجود زر "امتحان الحصة السابقة" في الواجهة
+                                                        const lessonStatus = lessonStatuses[currentLessonId];
+                                                        const hasPreviousExam = lessonIndex > 0; // أي درس غير الأول له امتحان سابق افتراضياً
+                                                       
+                                                        if (hasPreviousExam) {
+                                                            // إذا كان هناك امتحان سابق، يجب النجاح فيه
+                                                            if (examScore) {
+                                                                const percentage = (examScore.score / examScore.total) * 100;
+                                                                canAccess = percentage >= 50;
+                                                            } else {
+                                                                canAccess = false;
+                                                            }
+                                                        } else {
+                                                            // إذا لم يكن هناك امتحان سابق، يعتبر pass تلقائياً
+                                                            const percentage = 51;
+                                                            canAccess = percentage >= 50;
+                                                        }
                                                     }
                                                 }
                                             } else {
