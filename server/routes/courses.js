@@ -219,7 +219,14 @@ router.post('/:id/lessons', upload.single('image'), async (req, res) => {
       assignmentUrl: convertToEmbedUrl(req.body.assignmentUrl),
       viewLimit: parseInt(req.body.viewLimit) || 5,
       viewPrice: parseInt(req.body.viewPrice) || 10,
-      isHidden: req.body.isHidden === 'true' || req.body.isHidden === true
+      isHidden: req.body.isHidden === 'true' || req.body.isHidden === true,
+      // اجعل الحالة الافتراضية مفتوحة للجميع إن لم تُرسل قيمة
+      previousLessonRequired: (req.body.previousLessonRequired === true || req.body.previousLessonRequired === 'true') ? true 
+        : (req.body.previousLessonRequired === false || req.body.previousLessonRequired === 'false') ? false 
+        : false,
+      hasExam: (req.body.hasExam === true || req.body.hasExam === 'true') ? true 
+        : (req.body.hasExam === false || req.body.hasExam === 'false') ? false 
+        : false
     };
     
     if (req.file) {
@@ -430,6 +437,23 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
     lesson.viewLimit = req.body.viewLimit ? parseInt(req.body.viewLimit) : lesson.viewLimit;
     lesson.viewPrice = req.body.viewPrice ? parseInt(req.body.viewPrice) : lesson.viewPrice;
     lesson.isHidden = req.body.isHidden !== undefined ? (req.body.isHidden === 'true' || req.body.isHidden === true) : lesson.isHidden;
+    // دعم تحديث previousLessonRequired و hasExam عبر نفس الراوت للتوافق مع الإصدارات المختلفة من الواجهة
+    if (req.body.previousLessonRequired !== undefined) {
+      const raw = req.body.previousLessonRequired;
+      lesson.previousLessonRequired = (raw === true || raw === 'true' || raw === 1 || raw === '1')
+        ? true
+        : (raw === false || raw === 'false' || raw === 0 || raw === '0')
+          ? false
+          : (lesson.previousLessonRequired ?? false);
+    }
+    if (req.body.hasExam !== undefined) {
+      const raw = req.body.hasExam;
+      lesson.hasExam = (raw === true || raw === 'true' || raw === 1 || raw === '1')
+        ? true
+        : (raw === false || raw === 'false' || raw === 0 || raw === '0')
+          ? false
+          : (lesson.hasExam ?? false);
+    }
     
     if (req.file) {
       lesson.image = `/uploads/${req.file.filename}`;
@@ -1008,13 +1032,18 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
 router.put('/:courseId/lessons/:lessonId/has-exam', authenticateToken, async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
-    const { hasExam } = req.body;
+    const { hasExam: rawHasExam } = req.body;
+    const hasExam = (rawHasExam === true || rawHasExam === 'true' || rawHasExam === 1 || rawHasExam === '1')
+      ? true
+      : (rawHasExam === false || rawHasExam === 'false' || rawHasExam === 0 || rawHasExam === '0')
+        ? false
+        : false;
     
     console.log('hasExam API called:', { courseId, lessonId, hasExam, userId: req.user.userId });
     
-    // التحقق من أن المستخدم admin
+    // التحقق من صلاحيات المستخدم (أدمن أو معلم)
     const user = await User.findById(req.user.userId);
-    if (!user || user.userType !== 'Admin') {
+    if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
       return res.status(403).json({ message: 'غير مصرح' });
     }
     
@@ -1050,7 +1079,7 @@ router.put('/:courseId/lessons/:lessonId/has-exam', authenticateToken, async (re
 router.put('/:courseId/lessons/:lessonId/previous-lesson-required', authenticateToken, async (req, res) => {
   try {
     const { courseId, lessonId } = req.params;
-    const { previousLessonRequired } = req.body;
+    const { previousLessonRequired: rawPreviousLessonRequired } = req.body;
     
     console.log('previousLessonRequired API called:', { 
       courseId, 
@@ -1060,18 +1089,21 @@ router.put('/:courseId/lessons/:lessonId/previous-lesson-required', authenticate
       body: req.body 
     });
     
-    // التحقق من صحة البيانات
+    // تحويل القيمة إلى Boolean بشكل آمن (تقبل true/false كسلسلة أو رقم)
+    const previousLessonRequired = (rawPreviousLessonRequired === true || rawPreviousLessonRequired === 'true' || rawPreviousLessonRequired === 1 || rawPreviousLessonRequired === '1')
+      ? true
+      : (rawPreviousLessonRequired === false || rawPreviousLessonRequired === 'false' || rawPreviousLessonRequired === 0 || rawPreviousLessonRequired === '0')
+        ? false
+        : false; // افتراضي: مفتوح للجميع
+
+    // التحقق من صحة البيانات الأساسية
     if (!courseId || !lessonId) {
       return res.status(400).json({ message: 'معرف الكورس أو الدرس مفقود' });
     }
     
-    if (typeof previousLessonRequired !== 'boolean') {
-      return res.status(400).json({ message: 'قيمة previousLessonRequired يجب أن تكون true أو false' });
-    }
-    
-    // التحقق من أن المستخدم admin
+    // التحقق من صلاحيات المستخدم (أدمن أو معلم)
     const user = await User.findById(req.user.userId);
-    if (!user || user.userType !== 'Admin') {
+    if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
       return res.status(403).json({ message: 'غير مصرح' });
     }
     
