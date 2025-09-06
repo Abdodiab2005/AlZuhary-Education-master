@@ -9,7 +9,9 @@ const lessonSchema = new mongoose.Schema({
   image: { type: String },
   viewLimit: { type: Number, default: 5 },
   viewPrice: { type: Number, default: 10 }, // سعر مرة المشاهدة الإضافية
-  isHidden: { type: Boolean, default: false } // إخفاء الدرس عن الطلاب
+  isHidden: { type: Boolean, default: false }, // إخفاء الدرس عن الطلاب
+  hasExam: { type: Boolean, default: false }, // تحديد ما إذا كان الدرس له امتحان أم لا
+  previousLessonRequired: { type: Boolean, default: true } // تحديد ما إذا كان مطلوب نجاح في الحصة السابقة
 });
 
 const courseSchema = new mongoose.Schema({
@@ -20,5 +22,9 @@ const courseSchema = new mongoose.Schema({
   grade: { type: String, enum: ['أولى ثانوي', 'تانية ثانوي', 'تالتة ثانوي'], required: true },
   lessons: [lessonSchema]
 }, { timestamps: true });
+
+// إضافة فهارس لتحسين الأداء
+courseSchema.index({ 'lessons._id': 1 });
+courseSchema.index({ grade: 1 });
 
 module.exports = mongoose.model('Course', courseSchema); 
