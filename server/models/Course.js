@@ -11,7 +11,7 @@ const lessonSchema = new mongoose.Schema({
   viewPrice: { type: Number, default: 10 }, // سعر مرة المشاهدة الإضافية
   isHidden: { type: Boolean, default: false }, // إخفاء الدرس عن الطلاب
   hasExam: { type: Boolean, default: false }, // تحديد ما إذا كان الدرس له امتحان أم لا
-  previousLessonRequired: { type: Boolean, default: true } // تحديد ما إذا كان مطلوب نجاح في الحصة السابقة
+  previousLessonRequired: { type: Boolean } // تحديد ما إذا كان مطلوب نجاح في الحصة السابقة (بدون قيمة افتراضية)
 });
 
 const courseSchema = new mongoose.Schema({
