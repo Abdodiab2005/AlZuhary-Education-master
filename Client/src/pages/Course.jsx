@@ -99,7 +99,12 @@ export default function Course() {
             axios.get(`${API_BASE_URL}/api/courses/${courseId}`, { headers })
                 .then(res => {
                     setCourse(res.data);
-                    setLessons(res.data.lessons || []);
+                    // إضافة قيمة افتراضية لـ previousLessonRequired
+                    const lessonsWithDefaults = (res.data.lessons || []).map(lesson => ({
+                        ...lesson,
+                        previousLessonRequired: lesson.previousLessonRequired !== undefined ? lesson.previousLessonRequired : true
+                    }));
+                    setLessons(lessonsWithDefaults);
                 })
                 .catch(err => {
                     if (err.response?.status === 401) {
@@ -263,28 +268,20 @@ export default function Course() {
 
     // دالة تحديث previousLessonRequired للدرس - تحديث لحظي
     const handleTogglePreviousLessonRequired = async (lessonId, required) => {
-        console.log('handleTogglePreviousLessonRequired called:', { lessonId, required, courseId });
-        
         // التحقق من صحة البيانات
-        if (!lessonId) {
-            console.error('lessonId is missing');
-            return;
-        }
-        
-        if (!courseId) {
-            console.error('courseId is missing');
+        if (!lessonId || !courseId) {
             return;
         }
         
         // تحديث فوري في الواجهة - بدون انتظار
-            setLessons(prevLessons => {
-                const updatedLessons = prevLessons.map(lesson => 
-                    lesson._id === lessonId 
+        setLessons(prevLessons => {
+            const updatedLessons = prevLessons.map(lesson => 
+                lesson._id === lessonId 
                     ? { ...lesson, previousLessonRequired: required }
-                        : lesson
-                );
-                return updatedLessons;
-            });
+                    : lesson
+            );
+            return updatedLessons;
+        });
             
         // تحديث الخادم في الخلفية - بدون انتظار
         const updateServer = async () => {
@@ -293,23 +290,18 @@ export default function Course() {
             
             try {
                 const headers = getAuthHeaders();
-                console.log('Sending background request to:', `${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}/previous-lesson-required`);
                 
                 const response = await axios.put(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}/previous-lesson-required`, {
                     previousLessonRequired: required
                 }, { 
                     headers,
-                    timeout: 10000 // 10 ثواني فقط للخادم
+                    timeout: 10000
                 });
-                
-                console.log('Background update successful:', response.data);
                 
                 // تحديث حالة الدروس بعد النجاح
                 updateLessonStatuses();
                 
             } catch (err) {
-                console.error('Background update failed:', err);
-                
                 // إعادة تعيين الحالة في حالة الخطأ
                 setLessons(prevLessons => 
                     prevLessons.map(lesson => 
@@ -321,10 +313,7 @@ export default function Course() {
                 
                 // إظهار رسالة خطأ صامتة
                 if (err.response?.status === 401 || err.response?.status === 403) {
-                    console.log('Session expired, redirecting to login');
                     navigate('/login');
-                } else {
-                    console.log('Update failed, reverting change');
                 }
             } finally {
                 // إزالة مؤشر المزامنة
@@ -1038,24 +1027,23 @@ export default function Course() {
                                          {/* Checkbox متطلب الحصة السابقة */}
                                          <div className='bg-white rounded-lg p-2 shadow-lg border border-gray-300'>
                                              <div className='flex items-center gap-2'>
-                                                 <input
-                                                     type="checkbox"
-                                                     id={`previousLessonRequired-${lesson._id}`}
-                                                     checked={lesson.previousLessonRequired === true}
-                                                     onChange={(e) => {
-                                                         console.log('Checkbox changed:', { lessonId: lesson._id, checked: e.target.checked });
-                                                         handleTogglePreviousLessonRequired(lesson._id, e.target.checked);
-                                                     }}
-                                                     className='w-4 h-4 text-bluetheme-500 rounded focus:ring-bluetheme-500'
-                                                 />
-                                                 <label 
-                                                     htmlFor={`previousLessonRequired-${lesson._id}`} 
-                                                     className='text-xs font-bold cursor-pointer text-bluetheme-500 flex items-center gap-1'
-                                                 >
-                                                     {lesson.previousLessonRequired === true
-                                                         ? 'مطلوب نجاح سابق' 
-                                                         : 'مفتوح للجميع'
-                                                     }
+                                                  <input
+                                                      type="checkbox"
+                                                      id={`previousLessonRequired-${lesson._id}`}
+                                                      checked={lesson.previousLessonRequired}
+                                                      onChange={(e) => {
+                                                          handleTogglePreviousLessonRequired(lesson._id, e.target.checked);
+                                                      }}
+                                                      className='w-4 h-4 text-bluetheme-500 rounded focus:ring-bluetheme-500'
+                                                  />
+                                                  <label 
+                                                      htmlFor={`previousLessonRequired-${lesson._id}`} 
+                                                      className='text-xs font-bold cursor-pointer text-bluetheme-500 flex items-center gap-1'
+                                                  >
+                                                      {lesson.previousLessonRequired
+                                                          ? 'مطلوب نجاح سابق' 
+                                                          : 'مفتوح للجميع'
+                                                      }
                                                      {syncingLessons.has(lesson._id) && (
                                                          <span className='text-xs text-gray-400 animate-pulse'>🔄</span>
                                                      )}
