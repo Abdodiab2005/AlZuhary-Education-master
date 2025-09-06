@@ -45,6 +45,36 @@ router.post('/', authenticateToken, async (req, res) => {
     
     await newExam.save();
     
+    // إذا كان الامتحان من نوع "سابق"، نحدث درجات الطلاب لـ 0
+    if (examType === 'previous') {
+      try {
+        // جلب جميع المستخدمين الذين لديهم درجة 51 لهذا الدرس
+        const users = await User.find({
+          'examScores.lessonId': lessonId,
+          'examScores.score': 51
+        });
+        
+        // تحديث درجاتهم لـ 0
+        for (const user of users) {
+          const scoreIndex = user.examScores.findIndex(score => 
+            score.lessonId && score.lessonId.toString() === lessonId
+          );
+          
+          if (scoreIndex !== -1) {
+            user.examScores[scoreIndex].score = 0;
+            user.examScores[scoreIndex].passed = false;
+            user.examScores[scoreIndex].date = new Date();
+            await user.save();
+          }
+        }
+        
+        console.log(`تم تحديث درجات ${users.length} طالب لـ 0 عند إضافة امتحان سابق للدرس ${lessonId}`);
+      } catch (updateErr) {
+        console.error('Error updating student scores:', updateErr);
+        // لا نوقف العملية إذا فشل تحديث الدرجات
+      }
+    }
+    
     res.status(201).json({ 
       message: 'تم إنشاء امتحان جديد بنجاح', 
       exam: newExam, 
@@ -340,6 +370,47 @@ router.post('/auto-pass/:lessonId', authenticateToken, async (req, res) => {
 
     } catch (err) {
         console.error('Error in auto-pass:', err);
+        res.status(500).json({ message: 'Server error', error: err.message });
+    }
+});
+
+// API لتحديث درجة الطالب لـ 0 عند إضافة امتحان سابق
+router.post('/reset-score/:lessonId', authenticateToken, async (req, res) => {
+    try {
+        const { lessonId } = req.params;
+        const userId = req.user.userId;
+
+        // جلب المستخدم
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: 'المستخدم غير موجود' });
+        }
+
+        // البحث عن درجة الطالب للدرس
+        const scoreIndex = user.examScores.findIndex(score => 
+            score.lessonId && score.lessonId.toString() === lessonId
+        );
+
+        if (scoreIndex !== -1) {
+            // تحديث الدرجة لـ 0
+            user.examScores[scoreIndex].score = 0;
+            user.examScores[scoreIndex].passed = false;
+            user.examScores[scoreIndex].date = new Date();
+            
+            await user.save();
+
+            res.json({ 
+                message: 'تم تحديث درجة الطالب لـ 0', 
+                score: user.examScores[scoreIndex] 
+            });
+        } else {
+            res.json({ 
+                message: 'لم يتم العثور على درجة للطالب في هذا الدرس' 
+            });
+        }
+
+    } catch (err) {
+        console.error('Error in reset-score:', err);
         res.status(500).json({ message: 'Server error', error: err.message });
     }
 });
