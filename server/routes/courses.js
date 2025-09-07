@@ -219,10 +219,7 @@ router.post('/:id/lessons', upload.single('image'), async (req, res) => {
       assignmentUrl: convertToEmbedUrl(req.body.assignmentUrl),
       viewLimit: parseInt(req.body.viewLimit) || 5,
       viewPrice: parseInt(req.body.viewPrice) || 10,
-      isHidden: req.body.isHidden === 'true' || req.body.isHidden === true,
-      hasExam: (req.body.hasExam === true || req.body.hasExam === 'true') ? true 
-        : (req.body.hasExam === false || req.body.hasExam === 'false') ? false 
-        : false
+      isHidden: req.body.isHidden === 'true' || req.body.isHidden === true
     };
     
     if (req.file) {
@@ -239,7 +236,6 @@ router.post('/:id/lessons', upload.single('image'), async (req, res) => {
         viewLimit: lessonData.viewLimit,
         viewPrice: lessonData.viewPrice,
         isHidden: lessonData.isHidden,
-        hasExam: lessonData.hasExam,
         image: lessonData.image ? '[stored path]' : null
       }
     });
@@ -464,27 +460,6 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
     lesson.viewLimit = req.body.viewLimit ? parseInt(req.body.viewLimit) : lesson.viewLimit;
     lesson.viewPrice = req.body.viewPrice ? parseInt(req.body.viewPrice) : lesson.viewPrice;
     lesson.isHidden = req.body.isHidden !== undefined ? (req.body.isHidden === 'true' || req.body.isHidden === true) : lesson.isHidden;
-    if (req.body.showSuccessWarning !== undefined) {
-      const raw = req.body.showSuccessWarning;
-      lesson.showSuccessWarning = (raw === true || raw === 'true' || raw === 1 || raw === '1') ? true
-        : (raw === false || raw === 'false' || raw === 0 || raw === '0') ? false
-        : (lesson.showSuccessWarning ?? true);
-      console.log('REQ: showSuccessWarning update', {
-        courseId: req.params.courseId,
-        lessonId: req.params.lessonId,
-        raw,
-        parsed: lesson.showSuccessWarning
-      });
-    }
-    // دعم تحديث hasExam عبر نفس الراوت
-    if (req.body.hasExam !== undefined) {
-      const raw = req.body.hasExam;
-      lesson.hasExam = (raw === true || raw === 'true' || raw === 1 || raw === '1')
-        ? true
-        : (raw === false || raw === 'false' || raw === 0 || raw === '0')
-          ? false
-          : (lesson.hasExam ?? false);
-    }
     
     if (req.file) {
       lesson.image = `/uploads/${req.file.filename}`;
@@ -495,16 +470,6 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
 
     // تحديث ذري إضافي عند إرسال الحقول المنطقية لضمان الكتابة حتى لو اختلفت طبعات السيرفر
     const sets = {};
-    if (req.body.hasExam !== undefined) {
-      const raw = req.body.hasExam;
-      const val = (raw === true || raw === 'true' || raw === 1 || raw === '1') ? true : false;
-      sets['lessons.$.hasExam'] = val;
-    }
-    if (req.body.showSuccessWarning !== undefined) {
-      const raw = req.body.showSuccessWarning;
-      const val = (raw === true || raw === 'true' || raw === 1 || raw === '1') ? true : false;
-      sets['lessons.$.showSuccessWarning'] = val;
-    }
     if (Object.keys(sets).length > 0) {
       await Course.updateOne({ _id: req.params.courseId, 'lessons._id': req.params.lessonId }, { $set: sets });
     }
@@ -512,13 +477,6 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
     // إعادة الجلب لضمان إرسال آخر نسخة
     const fresh = await Course.findById(req.params.courseId);
     const freshLesson = fresh.lessons.id(req.params.lessonId);
-    if (req.body.showSuccessWarning !== undefined) {
-      console.log('DB: showSuccessWarning saved', {
-        courseId: req.params.courseId,
-        lessonId: req.params.lessonId,
-        saved: freshLesson?.showSuccessWarning
-      });
-    }
     res.json(freshLesson);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -924,8 +882,7 @@ router.get('/:courseId/lessons/:lessonId/status', authenticateToken, async (req,
       // إذا كان الكورس مفعل أو تم تفعيل الدرس السابق
       if (courseUnlocked || previousLessonActivation) {
         // التحقق من وجود امتحان للدرس السابق
-        const Exam = require('../models/Exam');
-        const exam = await Exam.findOne({ lessonId: previousLessonId });
+        const exam = await Exam.findOne({ lessonId: previousLessonId, examType: 'previous', enabled: true });
         canTakePreviousExam = !!exam; // متاح إذا كان هناك امتحان للدرس السابق
       }
     }
@@ -1020,7 +977,7 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
     if (previousLessonId) {
       try {
         // البحث عن امتحان للدرس السابق
-        const exam = await Exam.findOne({ lessonId: previousLessonId });
+        const exam = await Exam.findOne({ lessonId: previousLessonId, examType: 'previous', enabled: true });
         hasExam = !!exam;
       } catch (err) {
         hasExam = false;
@@ -1092,55 +1049,9 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
   }
 });
 
-// تحديث حقل hasExam للدرس
-router.put('/:courseId/lessons/:lessonId/has-exam', authenticateToken, async (req, res) => {
-  try {
-    const { courseId, lessonId } = req.params;
-    const { hasExam: rawHasExam } = req.body;
-    const hasExam = (rawHasExam === true || rawHasExam === 'true' || rawHasExam === 1 || rawHasExam === '1')
-      ? true
-      : (rawHasExam === false || rawHasExam === 'false' || rawHasExam === 0 || rawHasExam === '0')
-        ? false
-        : false;
-    
-    console.log('hasExam API called:', { courseId, lessonId, hasExam, userId: req.user.userId });
-    
-    // التحقق من صلاحيات المستخدم (أدمن أو معلم)
-    const user = await User.findById(req.user.userId);
-    if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
-      return res.status(403).json({ message: 'غير مصرح' });
-    }
-    
-    // استخدام updateOne بدلاً من findById + save لتحسين الأداء
-    const result = await Course.updateOne(
-      { 
-        _id: courseId, 
-        'lessons._id': lessonId 
-      },
-      { 
-        $set: { 
-          'lessons.$.hasExam': hasExam 
-        } 
-      }
-    );
-    
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ message: 'الكورس أو الدرس غير موجود' });
-    }
-    
-    res.json({ 
-      message: 'تم تحديث حالة الامتحان للدرس بنجاح',
-      hasExam: hasExam
-    });
-    
-  } catch (err) {
-    console.error('Error updating lesson hasExam:', err);
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
+// تم إزالة راوت تحديث hasExam
 
-// تحديث حقل previousLessonRequired للدرس
-// تم إزالة راوت previous-lesson-required (لم تعد الواجهة تستخدمه)
+// previousLessonRequired: تم إزالته نهائياً من المنطق
 
 // إعادة تعيين حالة الدروس المشتراة للمستخدم (للتجربة)
 router.post('/reset-user-lessons', authenticateToken, async (req, res) => {

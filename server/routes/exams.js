@@ -303,4 +303,56 @@ router.post('/reset-score/:lessonId', authenticateToken, async (req, res) => {
     }
 });
 
+// تفعيل امتحان سابق لدرس (enabled=true)
+router.put('/lesson/:lessonId/previous/enable', authenticateToken, async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const user = await User.findById(req.user.userId);
+    if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
+      return res.status(403).json({ message: 'غير مصرح' });
+    }
+
+    const prevExam = await Exam.findOne({ lessonId, examType: 'previous' });
+    if (!prevExam) return res.status(404).json({ message: 'لا يوجد امتحان سابق لهذا الدرس' });
+
+    prevExam.enabled = true;
+    await prevExam.save();
+
+    res.json({ message: 'تم تفعيل الامتحان السابق', enabled: true, examId: prevExam._id });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+// POST alias
+router.post('/lesson/:lessonId/previous/enable', authenticateToken, async (req, res) => {
+  req.method = 'PUT';
+  return router.handle(req, res);
+});
+
+// تعطيل امتحان سابق لدرس (enabled=false)
+router.put('/lesson/:lessonId/previous/disable', authenticateToken, async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const user = await User.findById(req.user.userId);
+    if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
+      return res.status(403).json({ message: 'غير مصرح' });
+    }
+
+    const prevExam = await Exam.findOne({ lessonId, examType: 'previous' });
+    if (!prevExam) return res.status(404).json({ message: 'لا يوجد امتحان سابق لهذا الدرس' });
+
+    prevExam.enabled = false;
+    await prevExam.save();
+
+    res.json({ message: 'تم تعطيل الامتحان السابق', enabled: false, examId: prevExam._id });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+// POST alias
+router.post('/lesson/:lessonId/previous/disable', authenticateToken, async (req, res) => {
+  req.method = 'PUT';
+  return router.handle(req, res);
+});
+
 module.exports = router; 
