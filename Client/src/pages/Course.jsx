@@ -40,6 +40,7 @@ export default function Course() {
     const [viewInputs, setViewInputs] = useState({});
     const [syncingLessons, setSyncingLessons] = useState(new Set());
     const [messageVisibility, setMessageVisibility] = useState({});
+    const [prevExamEnabled, setPrevExamEnabled] = useState({});
 
     // فحص courseId
 
@@ -257,6 +258,29 @@ export default function Course() {
     useEffect(() => {
         updateLessonStatuses();
     }, [courseId, lessons, watchedLessons, examScores]);
+
+    // جلب حالة امتحان السابق لكل درس للأدمن/المدرس
+    useEffect(() => {
+        const fetchPrevExams = async () => {
+            try {
+                if (!(userType === 'Admin' || userType === 'Teacher')) return;
+                const token = localStorage.getItem('token');
+                if (!token) return;
+                const map = {};
+                for (const l of lessons) {
+                    try {
+                        const res = await axios.get(`${API_BASE_URL}/api/exams/lesson/${l._id}`, { headers: { Authorization: `Bearer ${token}` } });
+                        const enabled = !!res.data?.organized?.previous?.enabled;
+                        map[l._id] = enabled;
+                    } catch (_) {
+                        map[l._id] = false;
+                    }
+                }
+                setPrevExamEnabled(map);
+            } catch (_) {}
+        };
+        if (lessons.length > 0) fetchPrevExams();
+    }, [lessons, userType]);
 
     // دالة موحدة لتحديث حالة الدروس
     const updateLessonStatuses = useCallback(async () => {
@@ -1007,6 +1031,37 @@ export default function Course() {
         }
     }, [userType, testExams]);
 
+    const handleTogglePrevExam = useCallback(async (lessonId) => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+            setSyncingLessons(prev => new Set([...prev, lessonId]));
+
+            // تحقق أولاً من وجود امتحان سابق
+            const check = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, { headers: { Authorization: `Bearer ${token}` } });
+            const prevExam = check.data?.organized?.previous;
+            if (!prevExam) {
+                window.alert('لا يوجد امتحان سابق لهذا الدرس. أنشئ امتحان سابق أولاً.');
+                return;
+            }
+            const current = !!prevExamEnabled[lessonId];
+            const url = current
+                ? `${API_BASE_URL}/api/exams/lesson/${lessonId}/previous/disable`
+                : `${API_BASE_URL}/api/exams/lesson/${lessonId}/previous/enable`;
+            await axios.put(url, {}, { headers: { Authorization: `Bearer ${token}` } });
+            setPrevExamEnabled(prev => ({ ...prev, [lessonId]: !current }));
+        } catch (err) {
+            const msg = err?.response?.data?.message || 'تعذر تغيير حالة الامتحان السابق';
+            window.alert(msg);
+        } finally {
+            setSyncingLessons(prev => {
+                const next = new Set(prev);
+                next.delete(lessonId);
+                return next;
+            });
+        }
+    }, [prevExamEnabled]);
+
     return <>
         <div className='font-GraphicSchool h-[100hv] w-full  flex flex-col items-center'>
             {/* Heade Section */}
@@ -1103,39 +1158,16 @@ export default function Course() {
                                              {(lesson.isHidden || false) ? '👁' : '🚫'}
                                          </button>
                                          <button className='p-2 rounded-xl bg-bluetheme-500 text-white text-xl md:text-2xl font-GraphicSchool hover:bg-blue-600 transition-colors' onClick={() => handleEditClick(lesson)}><MdEdit /></button>
+                                         <button 
+                                             className='p-2 rounded-xl bg-amber-500 text-white text-xs md:text-sm font-GraphicSchool hover:bg-amber-600 transition-colors'
+                                             onClick={() => handleTogglePrevExam(lesson._id)}
+                                             disabled={syncingLessons.has(lesson._id)}
+                                             title='تفعيل/تعطيل امتحان الحصة السابقة'
+                                         >
+                                             {syncingLessons.has(lesson._id) ? 'جاري الحفظ...' : (prevExamEnabled[lesson._id] ? 'تعطيل امتحان سابق' : 'تفعيل امتحان سابق')}
+                                         </button>
                                      </div>
-                                         {/* تبديل يدوي لرسالة طلب النجاح (لا يؤثر على منطق الفتح) */}
-                                         {lessonIndex !== 0 && (
-                                             <div className='bg-white rounded-lg p-2 shadow-lg border border-gray-300'>
-                                                 <div className='flex items-center gap-2'>
-                                                      <input
-                                                          type="checkbox"
-                                                         id={`warnVisibility-${lesson._id}`}
-                                                         checked={(lesson.showSuccessWarning ?? true) && isWarnVisible(lesson._id)}
-                                                          onChange={(e) => {
-                                                             handleToggleWarnMessage(lesson._id);
-                                                             try {
-                                                                 const token = localStorage.getItem('token');
-                                                                 console.log('FE -> BE showSuccessWarning', { lessonId: lesson._id, checked: e.target.checked });
-                                                                 axios.put(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lesson._id}`, { showSuccessWarning: e.target.checked }, {
-                                                                     headers: { Authorization: `Bearer ${token}` }
-                                                                 }).then((res) => {
-                                                                     console.log('BE response showSuccessWarning', res.data?.showSuccessWarning ?? res.data?.lesson?.showSuccessWarning ?? '(inspect lesson object)');
-                                                                     setLessons(prev => prev.map(l => l._id === lesson._id ? res.data : l));
-                                                                 }).catch(() => {});
-                                                             } catch(_) {}
-                                                          }}
-                                                          className='w-4 h-4 text-bluetheme-500 rounded focus:ring-bluetheme-500'
-                                                      />
-                                                      <label 
-                                                         htmlFor={`warnVisibility-${lesson._id}`} 
-                                                          className='text-xs font-bold cursor-pointer text-bluetheme-500 flex items-center gap-1'
-                                                      >
-                                                         {(lesson.showSuccessWarning ?? true) && isWarnVisible(lesson._id) ? 'عرض رسالة النجاح' : 'إخفاء رسالة النجاح'}
-                                                     </label>
-                                             </div>
-                                             </div>
-                                         )}
+                                       
                                      </div>
                                  )}
 
@@ -1197,8 +1229,9 @@ export default function Course() {
                                             }
                                             
                                             // إذا كان يمكن الوصول للدرس، نعرض زر الدخول
-                                            // تجاوز يدوي: إذا تم إخفاء رسالة النجاح لهذه الحصة، افتح الوصول أيضاً
-                                            if (lessonIndex !== 0 && (isLessonPurchased || lesson.price === 0) && !isWarnVisible(lesson._id)) {
+                                            // تجاوز احترافي: إذا قام الأدمن بإخفاء رسالة النجاح لهذا الدرس
+                                            // نسمح بالدخول للحصة بشرط أن تكون مشتراة/مجانية
+                                            if (lessonIndex !== 0 && (isLessonPurchased || lesson.price === 0) && (lesson.showSuccessWarning === false)) {
                                                 canAccess = true;
                                             }
 
@@ -1263,7 +1296,6 @@ export default function Course() {
                                             if (isLessonPurchased || lesson.price === 0) {
                                                 return (
                                                     <div className='flex flex-col items-center gap-2'>
-                                                        {isWarnVisible(lesson._id) && (
                                                         <div className='bg-amber-100 border-2 border-amber-400 rounded-lg p-3 text-center max-w-[200px]'>
                                                             <p className='text-amber-800 text-sm font-medium mb-1'>
                                                                 يجب النجاح في امتحان الحصة السابقة
@@ -1272,7 +1304,6 @@ export default function Course() {
                                                                 بنسبة 50% أو أكثر
                                                             </p>
                                                         </div>
-                                                        )}
                                                     </div>
                                                 );
                                             }
@@ -1352,7 +1383,7 @@ export default function Course() {
                             <input type="text" placeholder='سعر مرة المشاهدة الإضافية' className='bg-white text-black rounded-md w-[40%] p-0.5 text-center text-xs' value={newLesson.viewPrice} onChange={e => setNewLesson({ ...newLesson, viewPrice: e.target.value === '' ? '' : parseInt(e.target.value) || 10 })} />
                             <input type="url" placeholder='URL الحصة' className='w-[90%] rounded-3xl text-center text-black bg-white p-0.5 text-md' value={newLesson.videoUrl} onChange={e => setNewLesson({ ...newLesson, videoUrl: e.target.value })} />
                             <input type="url" placeholder='URL الواجب' className='w-[90%] rounded-3xl text-center text-black bg-white p-0.5 text-md' value={newLesson.assignmentUrl} onChange={e => setNewLesson({ ...newLesson, assignmentUrl: e.target.value })} />
-                        </div>
+                         </div>
 
                     </div>
                     {/* Save & Delete Button */}
@@ -1383,7 +1414,7 @@ export default function Course() {
                                 <input type="text" name="viewPrice" placeholder='سعر مرة المشاهدة الإضافية' className='bg-white text-black rounded-md w-[40%] p-0.5 text-center text-xs' value={editForm.viewPrice} onChange={handleEditFormChange} />
                                 <input type="url" name="videoUrl" placeholder='URL الحصة' className='w-[90%] rounded-3xl text-center text-black bg-white p-0.5 text-md' value={editForm.videoUrl} onChange={handleEditFormChange} />
                                 <input type="url" name="assignmentUrl" placeholder='URL الواجب' className='w-[90%] rounded-3xl text-center text-black bg-white p-0.5 text-md' value={editForm.assignmentUrl} onChange={handleEditFormChange} />
-                            </div>
+                             </div>
                         </div>
                         {/* Save & Delete Button */}
                         <div className='flex justify-center items-center gap-3'>
