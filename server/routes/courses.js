@@ -411,7 +411,7 @@ router.patch('/update-all-grades', async (req, res) => {
     
     res.json({ 
       message: `تم تحديث ${result.modifiedCount} كورس`,
-      modifiedCount: result.modifiedCount 
+      modifiedCount 
     });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -882,7 +882,7 @@ router.get('/:courseId/lessons/:lessonId/status', authenticateToken, async (req,
       // إذا كان الكورس مفعل أو تم تفعيل الدرس السابق
       if (courseUnlocked || previousLessonActivation) {
         // التحقق من وجود امتحان للدرس السابق
-        const exam = await Exam.findOne({ lessonId: previousLessonId, examType: 'previous', enabled: true });
+        const exam = await Exam.findOne({ lessonId: previousLessonId });
         canTakePreviousExam = !!exam; // متاح إذا كان هناك امتحان للدرس السابق
       }
     }
@@ -977,7 +977,7 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
     if (previousLessonId) {
       try {
         // البحث عن امتحان للدرس السابق
-        const exam = await Exam.findOne({ lessonId: previousLessonId, examType: 'previous', enabled: true });
+        const exam = await Exam.findOne({ lessonId: previousLessonId });
         hasExam = !!exam;
       } catch (err) {
         hasExam = false;

@@ -52,8 +52,6 @@ router.post('/', authenticateToken, async (req, res) => {
       questionsCount: questions.length
     });
     
-    // تم إزالة منطق تعديل الدرجات 51/0 عند إنشاء امتحان سابق
-    
     res.status(201).json({ 
       message: 'تم إنشاء امتحان جديد بنجاح', 
       exam: newExam, 
@@ -109,7 +107,7 @@ router.post('/:examId/submit', authenticateToken, async (req, res) => {
     const result = exam.calculateScore(answers);
     const passed = result.percentage >= exam.passingScore;
     
-    // تسجيل الدرجة للمستخدم
+    // تسجيل النتيجة للمستخدم
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
     
@@ -260,27 +258,22 @@ router.delete('/:examId', authenticateToken, async (req, res) => {
     }
 });
 
-
-
 // API لتحديث درجة الطالب لـ 0 عند إضافة امتحان سابق
 router.post('/reset-score/:lessonId', authenticateToken, async (req, res) => {
     try {
         const { lessonId } = req.params;
         const userId = req.user.userId;
 
-        // جلب المستخدم
         const user = await User.findById(userId);
         if (!user) {
             return res.status(404).json({ message: 'المستخدم غير موجود' });
         }
 
-        // البحث عن درجة الطالب للدرس
         const scoreIndex = user.examScores.findIndex(score => 
             score.lessonId && score.lessonId.toString() === lessonId
         );
 
         if (scoreIndex !== -1) {
-            // تحديث الدرجة لـ 0
             user.examScores[scoreIndex].score = 0;
             user.examScores[scoreIndex].passed = false;
             user.examScores[scoreIndex].date = new Date();
@@ -301,110 +294,6 @@ router.post('/reset-score/:lessonId', authenticateToken, async (req, res) => {
         console.error('Error in reset-score:', err);
         res.status(500).json({ message: 'Server error', error: err.message });
     }
-});
-
-// تفعيل امتحان سابق لدرس (enabled=true)
-router.put('/lesson/:lessonId/previous/enable', authenticateToken, async (req, res) => {
-  try {
-    const { lessonId } = req.params;
-    const user = await User.findById(req.user.userId);
-    if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
-      return res.status(403).json({ message: 'غير مصرح' });
-    }
-
-    const result = await Exam.updateMany({ lessonId, examType: 'previous' }, { $set: { enabled: true } });
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ message: 'لا يوجد امتحان سابق لهذا الدرس' });
-    }
-
-    res.json({ message: 'تم تفعيل الامتحان السابق', enabled: true, matched: result.matchedCount, modified: result.modifiedCount });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-// POST alias
-router.post('/lesson/:lessonId/previous/enable', authenticateToken, async (req, res) => {
-  req.method = 'PUT';
-  return router.handle(req, res);
-});
-
-// تعطيل امتحان سابق لدرس (enabled=false)
-router.put('/lesson/:lessonId/previous/disable', authenticateToken, async (req, res) => {
-  try {
-    const { lessonId } = req.params;
-    const user = await User.findById(req.user.userId);
-    if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
-      return res.status(403).json({ message: 'غير مصرح' });
-    }
-
-    const result = await Exam.updateMany({ lessonId, examType: 'previous' }, { $set: { enabled: false } });
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ message: 'لا يوجد امتحان سابق لهذا الدرس' });
-    }
-
-    res.json({ message: 'تم تعطيل الامتحان السابق', enabled: false, matched: result.matchedCount, modified: result.modifiedCount });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-// POST alias
-router.post('/lesson/:lessonId/previous/disable', authenticateToken, async (req, res) => {
-  req.method = 'PUT';
-  return router.handle(req, res);
-});
-
-// تفعيل امتحان سابق محدد (بالـ examId)
-router.put('/:examId/previous/enable', authenticateToken, async (req, res) => {
-  try {
-    const { examId } = req.params;
-    const user = await User.findById(req.user.userId);
-    if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
-      return res.status(403).json({ message: 'غير مصرح' });
-    }
-
-    const exam = await Exam.findById(examId);
-    if (!exam) return res.status(404).json({ message: 'الامتحان غير موجود' });
-    if (exam.examType !== 'previous') return res.status(400).json({ message: 'هذا الامتحان ليس من نوع previous' });
-
-    exam.enabled = true;
-    await exam.save();
-
-    res.json({ message: 'تم تفعيل الامتحان السابق', enabled: true, examId: exam._id });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-// POST alias
-router.post('/:examId/previous/enable', authenticateToken, async (req, res) => {
-  req.method = 'PUT';
-  return router.handle(req, res);
-});
-
-// تعطيل امتحان سابق محدد (بالـ examId)
-router.put('/:examId/previous/disable', authenticateToken, async (req, res) => {
-  try {
-    const { examId } = req.params;
-    const user = await User.findById(req.user.userId);
-    if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
-      return res.status(403).json({ message: 'غير مصرح' });
-    }
-
-    const exam = await Exam.findById(examId);
-    if (!exam) return res.status(404).json({ message: 'الامتحان غير موجود' });
-    if (exam.examType !== 'previous') return res.status(400).json({ message: 'هذا الامتحان ليس من نوع previous' });
-
-    exam.enabled = false;
-    await exam.save();
-
-    res.json({ message: 'تم تعطيل الامتحان السابق', enabled: false, examId: exam._id });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-// POST alias
-router.post('/:examId/previous/disable', authenticateToken, async (req, res) => {
-  req.method = 'PUT';
-  return router.handle(req, res);
 });
 
 module.exports = router; 
