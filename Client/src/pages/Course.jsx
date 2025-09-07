@@ -104,7 +104,6 @@ export default function Course() {
                     const lessonsWithDefaults = (res.data.lessons || []).map(lesson => ({
                         ...lesson
                     }));
-                    console.log('Fetched lessons states:', lessonsWithDefaults.map(l => ({ id: l._id, previousLessonRequired: l.previousLessonRequired, hasExam: l.hasExam })));
                     setLessons(lessonsWithDefaults);
                 })
                 .catch(err => {
@@ -1109,20 +1108,32 @@ export default function Course() {
                                          {lessonIndex !== 0 && (
                                              <div className='bg-white rounded-lg p-2 shadow-lg border border-gray-300'>
                                                  <div className='flex items-center gap-2'>
-                                                     <input
-                                                         type="checkbox"
+                                                      <input
+                                                          type="checkbox"
                                                          id={`warnVisibility-${lesson._id}`}
-                                                         checked={isWarnVisible(lesson._id)}
-                                                         onChange={() => handleToggleWarnMessage(lesson._id)}
-                                                         className='w-4 h-4 text-bluetheme-500 rounded focus:ring-bluetheme-500'
-                                                     />
-                                                     <label 
+                                                         checked={(lesson.showSuccessWarning ?? true) && isWarnVisible(lesson._id)}
+                                                          onChange={(e) => {
+                                                             handleToggleWarnMessage(lesson._id);
+                                                             try {
+                                                                 const token = localStorage.getItem('token');
+                                                                 console.log('FE -> BE showSuccessWarning', { lessonId: lesson._id, checked: e.target.checked });
+                                                                 axios.put(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lesson._id}`, { showSuccessWarning: e.target.checked }, {
+                                                                     headers: { Authorization: `Bearer ${token}` }
+                                                                 }).then((res) => {
+                                                                     console.log('BE response showSuccessWarning', res.data?.showSuccessWarning ?? res.data?.lesson?.showSuccessWarning ?? '(inspect lesson object)');
+                                                                     setLessons(prev => prev.map(l => l._id === lesson._id ? res.data : l));
+                                                                 }).catch(() => {});
+                                                             } catch(_) {}
+                                                          }}
+                                                          className='w-4 h-4 text-bluetheme-500 rounded focus:ring-bluetheme-500'
+                                                      />
+                                                      <label 
                                                          htmlFor={`warnVisibility-${lesson._id}`} 
-                                                         className='text-xs font-bold cursor-pointer text-bluetheme-500 flex items-center gap-1'
-                                                     >
-                                                         {isWarnVisible(lesson._id) ? 'عرض رسالة النجاح' : 'إخفاء رسالة النجاح'}
+                                                          className='text-xs font-bold cursor-pointer text-bluetheme-500 flex items-center gap-1'
+                                                      >
+                                                         {(lesson.showSuccessWarning ?? true) && isWarnVisible(lesson._id) ? 'عرض رسالة النجاح' : 'إخفاء رسالة النجاح'}
                                                      </label>
-                                                 </div>
+                                             </div>
                                              </div>
                                          )}
                                      </div>
@@ -1163,21 +1174,21 @@ export default function Course() {
                                                     canAccess = true;
                                                 } else {
                                                     // للدروس الأخرى، نتحقق من نجاح امتحان الدرس السابق فقط
-                                                    const previousLessonId = lessons[lessonIndex - 1]?._id;
-                                                    if (previousLessonId) {
-                                                        // البحث في examScores للدرس السابق
-                                                        const examScore = examScores.find(score => {
-                                                            if (typeof score === 'object' && score.lessonId) {
-                                                                return score.lessonId.toString() === previousLessonId.toString();
-                                                            }
-                                                            return false;
-                                                        });
-                                                        // حساب النسبة المئوية
-                                                        const percentage = examScore ? (examScore.score / examScore.total) * 100 : 0;
-                                                        canAccess = examScore && percentage >= 50;
-                                                    } else {
-                                                        // إذا لم يكن هناك درس سابق، فتح الدرس
-                                                        canAccess = true;
+                                                        const previousLessonId = lessons[lessonIndex - 1]?._id;
+                                                        if (previousLessonId) {
+                                                            // البحث في examScores للدرس السابق
+                                                            const examScore = examScores.find(score => {
+                                                                if (typeof score === 'object' && score.lessonId) {
+                                                                    return score.lessonId.toString() === previousLessonId.toString();
+                                                                }
+                                                                return false;
+                                                            });
+                                                            // حساب النسبة المئوية
+                                                            const percentage = examScore ? (examScore.score / examScore.total) * 100 : 0;
+                                                            canAccess = examScore && percentage >= 50;
+                                                        } else {
+                                                            // إذا لم يكن هناك درس سابق، فتح الدرس
+                                                            canAccess = true;
                                                     }
                                                 }
                                             } else {
@@ -1253,14 +1264,14 @@ export default function Course() {
                                                 return (
                                                     <div className='flex flex-col items-center gap-2'>
                                                         {isWarnVisible(lesson._id) && (
-                                                            <div className='bg-amber-100 border-2 border-amber-400 rounded-lg p-3 text-center max-w-[200px]'>
-                                                                <p className='text-amber-800 text-sm font-medium mb-1'>
-                                                                    يجب النجاح في امتحان الحصة السابقة
-                                                                </p>
-                                                                <p className='text-amber-700 text-xs'>
-                                                                    بنسبة 50% أو أكثر
-                                                                </p>
-                                                            </div>
+                                                        <div className='bg-amber-100 border-2 border-amber-400 rounded-lg p-3 text-center max-w-[200px]'>
+                                                            <p className='text-amber-800 text-sm font-medium mb-1'>
+                                                                يجب النجاح في امتحان الحصة السابقة
+                                                            </p>
+                                                            <p className='text-amber-700 text-xs'>
+                                                                بنسبة 50% أو أكثر
+                                                            </p>
+                                                        </div>
                                                         )}
                                                     </div>
                                                 );
