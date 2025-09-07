@@ -1048,8 +1048,14 @@ export default function Course() {
             const url = current
                 ? `${API_BASE_URL}/api/exams/lesson/${lessonId}/previous/disable`
                 : `${API_BASE_URL}/api/exams/lesson/${lessonId}/previous/enable`;
-            await axios.put(url, {}, { headers: { Authorization: `Bearer ${token}` } });
+            await axios.post(url, {}, { headers: { Authorization: `Bearer ${token}` } });
             setPrevExamEnabled(prev => ({ ...prev, [lessonId]: !current }));
+            // إعادة التحقق بعد الحفظ
+            try {
+                const check2 = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, { headers: { Authorization: `Bearer ${token}` } });
+                const enabled2 = !!check2.data?.organized?.previous?.enabled;
+                setPrevExamEnabled(prev => ({ ...prev, [lessonId]: enabled2 }));
+            } catch (_) {}
         } catch (err) {
             const msg = err?.response?.data?.message || 'تعذر تغيير حالة الامتحان السابق';
             window.alert(msg);
