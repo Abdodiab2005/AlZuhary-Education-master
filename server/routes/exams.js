@@ -44,36 +44,15 @@ router.post('/', authenticateToken, async (req, res) => {
     });
     
     await newExam.save();
+    console.log('DB Write: CREATE_EXAM', {
+      examId: newExam._id.toString(),
+      lessonId,
+      courseId,
+      examType,
+      questionsCount: questions.length
+    });
     
-    // إذا كان الامتحان من نوع "سابق"، نحدث درجات الطلاب لـ 0
-    if (examType === 'previous') {
-      try {
-        // جلب جميع المستخدمين الذين لديهم درجة 51 لهذا الدرس
-        const users = await User.find({
-          'examScores.lessonId': lessonId,
-          'examScores.score': 51
-        });
-        
-        // تحديث درجاتهم لـ 0
-        for (const user of users) {
-          const scoreIndex = user.examScores.findIndex(score => 
-            score.lessonId && score.lessonId.toString() === lessonId
-          );
-          
-          if (scoreIndex !== -1) {
-            user.examScores[scoreIndex].score = 0;
-            user.examScores[scoreIndex].passed = false;
-            user.examScores[scoreIndex].date = new Date();
-            await user.save();
-          }
-        }
-        
-        console.log(`تم تحديث درجات ${users.length} طالب لـ 0 عند إضافة امتحان سابق للدرس ${lessonId}`);
-      } catch (updateErr) {
-        console.error('Error updating student scores:', updateErr);
-        // لا نوقف العملية إذا فشل تحديث الدرجات
-      }
-    }
+    // تم إزالة منطق تعديل الدرجات 51/0 عند إنشاء امتحان سابق
     
     res.status(201).json({ 
       message: 'تم إنشاء امتحان جديد بنجاح', 
@@ -157,6 +136,15 @@ router.post('/:examId/submit', authenticateToken, async (req, res) => {
       });
     }
     await user.save();
+    console.log('DB Write: SUBMIT_EXAM_SCORE', {
+      userId: user._id.toString(),
+      examId: exam._id.toString(),
+      lessonId: exam.lessonId.toString(),
+      score: result.score,
+      total: result.totalPossible,
+      percentage: result.percentage,
+      passed
+    });
     
     res.json({ 
       score: result.score, 
@@ -217,6 +205,13 @@ router.put('/:examId', authenticateToken, async (req, res) => {
             { name, courseId, lessonId, examType, questions },
             { new: true, runValidators: true }
         );
+        console.log('DB Write: UPDATE_EXAM', {
+          examId,
+          courseId,
+          lessonId,
+          examType,
+          questionsCount: questions.length
+        });
         
         res.json({
             message: 'تم تحديث الامتحان بنجاح',
@@ -249,6 +244,7 @@ router.delete('/:examId', authenticateToken, async (req, res) => {
         }
         
         await Exam.findByIdAndDelete(examId);
+        console.log('DB Write: DELETE_EXAM', { examId });
         
         res.json({ 
             message: 'تم حذف الامتحان بنجاح',

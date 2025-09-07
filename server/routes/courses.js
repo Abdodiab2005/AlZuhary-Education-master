@@ -220,10 +220,6 @@ router.post('/:id/lessons', upload.single('image'), async (req, res) => {
       viewLimit: parseInt(req.body.viewLimit) || 5,
       viewPrice: parseInt(req.body.viewPrice) || 10,
       isHidden: req.body.isHidden === 'true' || req.body.isHidden === true,
-      // اجعل الحالة الافتراضية مفتوحة للجميع إن لم تُرسل قيمة
-      previousLessonRequired: (req.body.previousLessonRequired === true || req.body.previousLessonRequired === 'true') ? true 
-        : (req.body.previousLessonRequired === false || req.body.previousLessonRequired === 'false') ? false 
-        : false,
       hasExam: (req.body.hasExam === true || req.body.hasExam === 'true') ? true 
         : (req.body.hasExam === false || req.body.hasExam === 'false') ? false 
         : false
@@ -232,7 +228,22 @@ router.post('/:id/lessons', upload.single('image'), async (req, res) => {
     if (req.file) {
       lessonData.image = `/uploads/${req.file.filename}`;
     }
-    
+    // Log DB write intent
+    console.log('DB Write: ADD_LESSON', {
+      courseId: req.params.id,
+      lesson: {
+        title: lessonData.title,
+        price: lessonData.price,
+        videoUrl: lessonData.videoUrl,
+        assignmentUrl: lessonData.assignmentUrl,
+        viewLimit: lessonData.viewLimit,
+        viewPrice: lessonData.viewPrice,
+        isHidden: lessonData.isHidden,
+        hasExam: lessonData.hasExam,
+        image: lessonData.image ? '[stored path]' : null
+      }
+    });
+
     course.lessons.push(lessonData);
     await course.save();
     
@@ -290,6 +301,13 @@ router.post('/:courseId/lessons/:lessonId/buy', authenticateToken, async (req, r
         video: true, 
         assignment: true 
       });
+      console.log('DB Write: BUY_LESSON (course purchased)', {
+        userId: user._id.toString(),
+        courseId: course._id.toString(),
+        lessonId: lesson._id.toString(),
+        creditsBefore: user.credits,
+        creditsAfter: user.credits
+      });
       await user.save();
       return res.json({ 
         message: 'الدرس متاح لك (الكورس مشترى)', 
@@ -302,11 +320,20 @@ router.post('/:courseId/lessons/:lessonId/buy', authenticateToken, async (req, r
       return res.status(400).json({ message: 'الرصيد غير كافي' });
     }
     
+    const creditsBeforeBuy = user.credits;
     user.credits -= lesson.price;
     if (!user.purchasedLessons) user.purchasedLessons = [];
     user.purchasedLessons.push({ lessonId: lesson._id, video: true, assignment: true });
     user.active = true;
-    
+    console.log('DB Write: BUY_LESSON (single lesson)', {
+      userId: user._id.toString(),
+      courseId: course._id.toString(),
+      lessonId: lesson._id.toString(),
+      price: lesson.price,
+      creditsBefore: creditsBeforeBuy,
+      creditsAfter: user.credits
+    });
+
     await user.save();
     
     res.json({ 
@@ -437,15 +464,7 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
     lesson.viewLimit = req.body.viewLimit ? parseInt(req.body.viewLimit) : lesson.viewLimit;
     lesson.viewPrice = req.body.viewPrice ? parseInt(req.body.viewPrice) : lesson.viewPrice;
     lesson.isHidden = req.body.isHidden !== undefined ? (req.body.isHidden === 'true' || req.body.isHidden === true) : lesson.isHidden;
-    // دعم تحديث previousLessonRequired و hasExam عبر نفس الراوت للتوافق مع الإصدارات المختلفة من الواجهة
-    if (req.body.previousLessonRequired !== undefined) {
-      const raw = req.body.previousLessonRequired;
-      lesson.previousLessonRequired = (raw === true || raw === 'true' || raw === 1 || raw === '1')
-        ? true
-        : (raw === false || raw === 'false' || raw === 0 || raw === '0')
-          ? false
-          : (lesson.previousLessonRequired ?? false);
-    }
+    // دعم تحديث hasExam عبر نفس الراوت
     if (req.body.hasExam !== undefined) {
       const raw = req.body.hasExam;
       lesson.hasExam = (raw === true || raw === 'true' || raw === 1 || raw === '1')
@@ -464,11 +483,6 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
 
     // تحديث ذري إضافي عند إرسال الحقول المنطقية لضمان الكتابة حتى لو اختلفت طبعات السيرفر
     const sets = {};
-    if (req.body.previousLessonRequired !== undefined) {
-      const raw = req.body.previousLessonRequired;
-      const val = (raw === true || raw === 'true' || raw === 1 || raw === '1') ? true : false;
-      sets['lessons.$.previousLessonRequired'] = val;
-    }
     if (req.body.hasExam !== undefined) {
       const raw = req.body.hasExam;
       const val = (raw === true || raw === 'true' || raw === 1 || raw === '1') ? true : false;
@@ -624,7 +638,7 @@ router.post('/:courseId/lessons/:lessonId/watch', authenticateToken, async (req,
     if (!lesson) return res.status(404).json({ message: 'الدرس غير موجود' });
     
     // التحقق من عدد مرات المشاهدة
-    let viewCount = user.lessonViewCounts.find(v => v.lessonId.toString() === req.params.lessonId);
+    let viewCount = user.lessonViewCounts.find(v => v.lessonId && v.lessonId.toString() === req.params.lessonId);
     if (!viewCount) {
       viewCount = { lessonId: req.params.lessonId, viewCount: 0 };
       user.lessonViewCounts.push(viewCount);
@@ -643,11 +657,17 @@ router.post('/:courseId/lessons/:lessonId/watch', authenticateToken, async (req,
     viewCount.viewCount++;
     
     // إضافة إلى watchedLessons إذا لم تكن موجودة
-    const already = user.watchedLessons.find(l => l.lessonId.toString() === req.params.lessonId);
+    const already = user.watchedLessons.find(l => l.lessonId && l.lessonId.toString() === req.params.lessonId);
     if (!already) {
       user.watchedLessons.push({ lessonId: req.params.lessonId });
     }
     
+    console.log('DB Write: WATCH_LESSON', {
+      userId: user._id.toString(),
+      lessonId: req.params.lessonId,
+      newViewCount: viewCount.viewCount,
+      viewLimit: lesson.viewLimit
+    });
     await user.save();
     res.json({
       watched: true,
@@ -680,7 +700,7 @@ router.post('/:courseId/lessons/:lessonId/buy-views', authenticateToken, async (
 
     // التحقق من أن المستخدم اشترى الدرس أو الكورس
     const courseUnlocked = user.purchasedCourses.includes(course._id);
-    const lessonActivation = user.purchasedLessons.find(l => l.lessonId.toString() === req.params.lessonId);
+    const lessonActivation = user.purchasedLessons.find(l => l.lessonId && l.lessonId.toString() === req.params.lessonId);
     
     // تحديد موقع الدرس في الكورس
     const currentLessonIndex = course.lessons.findIndex(l => l._id.toString() === req.params.lessonId);
@@ -706,7 +726,7 @@ router.post('/:courseId/lessons/:lessonId/buy-views', authenticateToken, async (
     user.credits -= totalPrice;
 
     // إضافة مرات المشاهدة الإضافية
-    let viewCount = user.lessonViewCounts.find(v => v.lessonId.toString() === req.params.lessonId);
+    let viewCount = user.lessonViewCounts.find(v => v.lessonId && v.lessonId.toString() === req.params.lessonId);
     if (!viewCount) {
       viewCount = { lessonId: req.params.lessonId, viewCount: 0 };
       user.lessonViewCounts.push(viewCount);
@@ -715,6 +735,14 @@ router.post('/:courseId/lessons/:lessonId/buy-views', authenticateToken, async (
     // إضافة مرات المشاهدة الإضافية (نضيف إلى الليمت الأصلي)
     viewCount.viewCount = Math.max(0, viewCount.viewCount - numberOfViews);
 
+    console.log('DB Write: BUY_VIEWS', {
+      userId: user._id.toString(),
+      lessonId: req.params.lessonId,
+      numberOfViews,
+      totalPaid: totalPrice,
+      creditsAfter: user.credits,
+      remainingViews: lesson.viewLimit - viewCount.viewCount
+    });
     await user.save();
 
     res.json({
@@ -767,18 +795,9 @@ router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async
       });
     }
 
-    // التحقق من نجاح امتحان الدرس السابق
+    // التحقق من نجاح امتحان الدرس السابق (لا يوجد تجاوز بواسطة previousLessonRequired بعد الآن)
     const previousLesson = lessons[currentLessonIndex - 1];
     if (previousLesson) {
-      // التحقق من متطلب الحصة السابقة للدرس الحالي
-      if (lesson.previousLessonRequired === false) {
-        // إذا كان متطلب الحصة السابقة معطل للدرس الحالي، فتح الدرس مباشرة
-        return res.json({ 
-          canAccess: true, 
-          reason: 'Previous lesson requirement disabled for this lesson - lesson open to all'
-        });
-      }
-
       // التحقق من وجود امتحان في الدرس السابق
       if (previousLesson.hasExam === true) {
         const previousExamScore = user.examScores.find(score => 
@@ -1097,79 +1116,7 @@ router.put('/:courseId/lessons/:lessonId/has-exam', authenticateToken, async (re
 });
 
 // تحديث حقل previousLessonRequired للدرس
-router.put('/:courseId/lessons/:lessonId/previous-lesson-required', authenticateToken, async (req, res) => {
-  try {
-    const { courseId, lessonId } = req.params;
-    const { previousLessonRequired: rawPreviousLessonRequired } = req.body;
-    
-    console.log('previousLessonRequired API called:', { 
-      courseId, 
-      lessonId, 
-      previousLessonRequired, 
-      userId: req.user.userId,
-      body: req.body 
-    });
-    
-    // تحويل القيمة إلى Boolean بشكل آمن (تقبل true/false كسلسلة أو رقم)
-    const previousLessonRequired = (rawPreviousLessonRequired === true || rawPreviousLessonRequired === 'true' || rawPreviousLessonRequired === 1 || rawPreviousLessonRequired === '1')
-      ? true
-      : (rawPreviousLessonRequired === false || rawPreviousLessonRequired === 'false' || rawPreviousLessonRequired === 0 || rawPreviousLessonRequired === '0')
-        ? false
-        : false; // افتراضي: مفتوح للجميع
-
-    // التحقق من صحة البيانات الأساسية
-    if (!courseId || !lessonId) {
-      return res.status(400).json({ message: 'معرف الكورس أو الدرس مفقود' });
-    }
-    
-    // التحقق من صلاحيات المستخدم (أدمن أو معلم)
-    const user = await User.findById(req.user.userId);
-    if (!user || (user.type !== 'Admin' && user.type !== 'Teacher')) {
-      return res.status(403).json({ message: 'غير مصرح' });
-    }
-    
-    // التحقق من وجود الكورس والدرس
-    const course = await Course.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ message: 'الكورس غير موجود' });
-    }
-    
-    const lesson = course.lessons.id(lessonId);
-    if (!lesson) {
-      return res.status(404).json({ message: 'الدرس غير موجود' });
-    }
-    
-    // استخدام updateOne بدلاً من findById + save لتحسين الأداء
-    const result = await Course.updateOne(
-      { 
-        _id: courseId, 
-        'lessons._id': lessonId 
-      },
-      { 
-        $set: { 
-          'lessons.$.previousLessonRequired': previousLessonRequired 
-        } 
-      }
-    );
-    
-    console.log('Update result:', result);
-    
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ message: 'الكورس أو الدرس غير موجود' });
-    }
-    
-    res.json({ 
-      message: 'تم تحديث حالة متطلب الحصة السابقة للدرس بنجاح',
-      previousLessonRequired: previousLessonRequired,
-      lessonId: lessonId,
-      courseId: courseId
-    });
-    
-  } catch (err) {
-    console.error('Error updating lesson previousLessonRequired:', err);
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
+// تم إزالة راوت previous-lesson-required (لم تعد الواجهة تستخدمه)
 
 // إعادة تعيين حالة الدروس المشتراة للمستخدم (للتجربة)
 router.post('/reset-user-lessons', authenticateToken, async (req, res) => {
