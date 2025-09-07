@@ -23,8 +23,7 @@ const examSchema = new mongoose.Schema({
   examType: { type: String, required: true, enum: ['current', 'previous'] }, // مطلوب - حالي أو سابق فقط
   questions: [questionSchema],
   totalPoints: { type: Number, default: 0 },
-  passingScore: { type: Number, default: 50 },
-  enabled: { type: Boolean, default: true }
+  passingScore: { type: Number, default: 50 }
 }, { 
   timestamps: true
 });
