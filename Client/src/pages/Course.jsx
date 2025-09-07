@@ -41,6 +41,7 @@ export default function Course() {
     const [syncingLessons, setSyncingLessons] = useState(new Set());
     const [messageVisibility, setMessageVisibility] = useState({});
     const [prevExamEnabled, setPrevExamEnabled] = useState({});
+    const [prevExamIdByLesson, setPrevExamIdByLesson] = useState({});
 
     // فحص courseId
 
@@ -267,16 +268,20 @@ export default function Course() {
                 const token = localStorage.getItem('token');
                 if (!token) return;
                 const map = {};
+                const ids = {};
                 for (const l of lessons) {
                     try {
                         const res = await axios.get(`${API_BASE_URL}/api/exams/lesson/${l._id}`, { headers: { Authorization: `Bearer ${token}` } });
-                        const enabled = !!res.data?.organized?.previous?.enabled;
+                        const prev = res.data?.organized?.previous;
+                        const enabled = !!prev?.enabled;
                         map[l._id] = enabled;
+                        if (prev && prev._id) ids[l._id] = prev._id;
                     } catch (_) {
                         map[l._id] = false;
                     }
                 }
                 setPrevExamEnabled(map);
+                setPrevExamIdByLesson(ids);
             } catch (_) {}
         };
         if (lessons.length > 0) fetchPrevExams();
@@ -1036,7 +1041,7 @@ export default function Course() {
             const token = localStorage.getItem('token');
             if (!token) return;
             setSyncingLessons(prev => new Set([...prev, lessonId]));
-
+ 
             // تحقق أولاً من وجود امتحان سابق
             const check = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, { headers: { Authorization: `Bearer ${token}` } });
             const prevExam = check.data?.organized?.previous;
@@ -1045,16 +1050,19 @@ export default function Course() {
                 return;
             }
             const current = !!prevExamEnabled[lessonId];
+            const examId = prevExamIdByLesson[lessonId] || prevExam._id;
             const url = current
-                ? `${API_BASE_URL}/api/exams/lesson/${lessonId}/previous/disable`
-                : `${API_BASE_URL}/api/exams/lesson/${lessonId}/previous/enable`;
+                ? `${API_BASE_URL}/api/exams/${examId}/previous/disable`
+                : `${API_BASE_URL}/api/exams/${examId}/previous/enable`;
             await axios.post(url, {}, { headers: { Authorization: `Bearer ${token}` } });
             setPrevExamEnabled(prev => ({ ...prev, [lessonId]: !current }));
             // إعادة التحقق بعد الحفظ
             try {
                 const check2 = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, { headers: { Authorization: `Bearer ${token}` } });
                 const enabled2 = !!check2.data?.organized?.previous?.enabled;
+                const id2 = check2.data?.organized?.previous?._id;
                 setPrevExamEnabled(prev => ({ ...prev, [lessonId]: enabled2 }));
+                if (id2) setPrevExamIdByLesson(prev => ({ ...prev, [lessonId]: id2 }));
             } catch (_) {}
         } catch (err) {
             const msg = err?.response?.data?.message || 'تعذر تغيير حالة الامتحان السابق';
@@ -1066,7 +1074,7 @@ export default function Course() {
                 return next;
             });
         }
-    }, [prevExamEnabled]);
+    }, [prevExamEnabled, prevExamIdByLesson]);
 
     return <>
         <div className='font-GraphicSchool h-[100hv] w-full  flex flex-col items-center'>
