@@ -7,12 +7,12 @@ import { useState, useEffect, useCallback } from 'react';
 import classes from '../css/single_lec.module.css'
 import { IoMdAdd } from 'react-icons/io';
 import { MdEdit } from 'react-icons/md';
-import Delete_btn from '../components/Delete_btn';
+// import Delete_btn from '../components/Delete_btn';
 import axios from 'axios';
 import API_BASE_URL from '../apiConfig';
 import { checkTokenValidity, getAuthHeaders } from '../utils/tokenHandler';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { FaLock } from 'react-icons/fa';
+// import { FaLock } from 'react-icons/fa';
 
 export default function Course() {
 
@@ -38,10 +38,7 @@ export default function Course() {
     const [forceUpdate, setForceUpdate] = useState(0);
     const [lessonStatuses, setLessonStatuses] = useState({});
     const [viewInputs, setViewInputs] = useState({});
-    const [syncingLessons, setSyncingLessons] = useState(new Set());
-    const [messageVisibility, setMessageVisibility] = useState({});
-    const [prevExamEnabled, setPrevExamEnabled] = useState({});
-    const [prevExamIdByLesson, setPrevExamIdByLesson] = useState({});
+    
 
     // فحص courseId
 
@@ -135,23 +132,7 @@ export default function Course() {
         return () => clearInterval(interval);
     }, [courseId]);
 
-    // تهيئة إعداد ظهور رسالة طلب النجاح من localStorage لكل كورس
-    useEffect(() => {
-        const storageKey = `lessonWarnVisibility_${courseId}`;
-        try {
-            const saved = localStorage.getItem(storageKey);
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                if (parsed && typeof parsed === 'object') {
-                    setMessageVisibility(parsed);
-                }
-            } else {
-                setMessageVisibility({});
-            }
-        } catch (e) {
-            setMessageVisibility({});
-        }
-    }, [courseId]);
+    
 
     // تحديث حالة الدروس عند تغيير نتائج الامتحانات
     useEffect(() => {
@@ -260,33 +241,6 @@ export default function Course() {
         updateLessonStatuses();
     }, [courseId, lessons, watchedLessons, examScores]);
 
-    // جلب حالة امتحان السابق لكل درس للأدمن/المدرس
-    useEffect(() => {
-        const fetchPrevExams = async () => {
-            try {
-                if (!(userType === 'Admin' || userType === 'Teacher')) return;
-                const token = localStorage.getItem('token');
-                if (!token) return;
-                const map = {};
-                const ids = {};
-                for (const l of lessons) {
-                    try {
-                        const res = await axios.get(`${API_BASE_URL}/api/exams/lesson/${l._id}`, { headers: { Authorization: `Bearer ${token}` } });
-                        const prev = res.data?.organized?.previous;
-                        const enabled = !!prev?.enabled;
-                        map[l._id] = enabled;
-                        if (prev && prev._id) ids[l._id] = prev._id;
-                    } catch (_) {
-                        map[l._id] = false;
-                    }
-                }
-                setPrevExamEnabled(map);
-                setPrevExamIdByLesson(ids);
-            } catch (_) {}
-        };
-        if (lessons.length > 0) fetchPrevExams();
-    }, [lessons, userType]);
-
     // دالة موحدة لتحديث حالة الدروس
     const updateLessonStatuses = useCallback(async () => {
         const token = localStorage.getItem('token');
@@ -313,130 +267,11 @@ export default function Course() {
         setLessonStatuses(statuses);
     }, [courseId, lessons]);
 
-    // دالة مساعدة لمعرفة حالة ظهور رسالة طلب النجاح لكل درس (افتراضي: تظهر)
-    const isWarnVisible = useCallback((lessonId) => {
-        return messageVisibility[lessonId] !== false;
-    }, [messageVisibility]);
+    
 
-    // تبديل ظهور رسالة طلب النجاح يدوياً وحفظها محلياً
-    const handleToggleWarnMessage = useCallback((lessonId) => {
-        setMessageVisibility(prev => {
-            const currentlyVisible = prev[lessonId] !== false;
-            const nextVisible = !currentlyVisible;
-            const next = { ...prev, [lessonId]: nextVisible };
-            try {
-                const storageKey = `lessonWarnVisibility_${courseId}`;
-                localStorage.setItem(storageKey, JSON.stringify(next));
-            } catch (e) {
-            }
-            return next;
-        });
-    }, [courseId]);
+    
 
-    // دالة تحديث previousLessonRequired للدرس - تحديث لحظي
-    const handleTogglePreviousLessonRequired = async (lessonId, required) => {
-        console.log('Toggle previousLessonRequired -> UI immediately:', { lessonId, to: required });
-        // التحقق من صحة البيانات
-        if (!lessonId || !courseId) {
-            return;
-        }
-        
-        // تحديث فوري في الواجهة - بدون انتظار
-        setLessons(prevLessons => {
-            const updatedLessons = prevLessons.map(lesson => 
-                lesson._id === lessonId 
-                    ? { ...lesson, previousLessonRequired: required }
-                    : lesson
-            );
-            return updatedLessons;
-        });
-            
-        // تحديث الخادم في الخلفية - بدون انتظار
-        const updateServer = async () => {
-            // إضافة مؤشر المزامنة
-            setSyncingLessons(prev => new Set([...prev, lessonId]));
-            
-            try {
-                const headers = getAuthHeaders();
-                
-                const url = `${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`;
-                console.log('Saving previousLessonRequired to:', url);
-                const form = new FormData();
-                form.append('previousLessonRequired', String(required));
-                const response = await axios.put(url, form, { 
-                    headers: { ...headers, 'Content-Type': 'multipart/form-data' },
-                    timeout: 30000
-                });
-                console.log('Saved previousLessonRequired on server:', response.data);
-                // تم الحفظ بنجاح في الخلفية بدون إعادة حساب فورية
-                
-            } catch (err) {
-                // إعادة تعيين الحالة في حالة الخطأ
-                setLessons(prevLessons => 
-                    prevLessons.map(lesson => 
-                        lesson._id === lessonId 
-                            ? { ...lesson, previousLessonRequired: !required }
-                            : lesson
-                    )
-                );
-                console.log('Error saving previousLessonRequired:', err?.response?.data || err?.message);
-                // إظهار رسالة خطأ صامتة
-                if (err.response?.status === 401 || err.response?.status === 403) {
-                    navigate('/login');
-                }
-            } finally {
-                // إزالة مؤشر المزامنة
-                setSyncingLessons(prev => {
-                    const newSet = new Set(prev);
-                    newSet.delete(lessonId);
-                    return newSet;
-                });
-            }
-        };
-        
-        // تشغيل التحديث في الخلفية
-        updateServer();
-    };
-
-    // دالة تحديث حالة وجود الامتحان للدرس - تحديث لحظي
-    const handleToggleHasExam = useCallback(async (lessonId, hasExam) => {
-        console.log('Toggle hasExam -> UI immediately:', { lessonId, to: hasExam });
-        if (!lessonId || !courseId) return;
-
-        // تحديث فوري
-        setLessons(prevLessons => prevLessons.map(lesson => (
-            lesson._id === lessonId ? { ...lesson, hasExam } : lesson
-        )));
-
-        // مؤشر مزامنة
-        setSyncingLessons(prev => new Set([...prev, lessonId]));
-
-        try {
-            const headers = getAuthHeaders();
-            const url = `${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}`;
-            console.log('Saving hasExam to:', url);
-            const form = new FormData();
-            form.append('hasExam', String(hasExam));
-            await axios.put(url, form, { headers: { ...headers, 'Content-Type': 'multipart/form-data' }, timeout: 30000 });
-            console.log('Saved hasExam on server:', { lessonId, hasExam });
-            // تم الحفظ بنجاح في الخلفية بدون إعادة حساب فورية
-        } catch (err) {
-            // تراجع في حالة الخطأ
-            setLessons(prevLessons => prevLessons.map(lesson => (
-                lesson._id === lessonId ? { ...lesson, hasExam: !hasExam } : lesson
-            )));
-            console.log('Error saving hasExam:', err?.response?.data || err?.message);
-            if (err.response?.status === 401 || err.response?.status === 403) {
-                navigate('/login');
-            }
-        } finally {
-            setSyncingLessons(prev => {
-                const next = new Set(prev);
-                next.delete(lessonId);
-                return next;
-            });
-        }
-    }, [courseId, navigate, updateLessonStatuses]);
+    
 
     // تحديث lessonStatuses عند تغيير examScores
     useEffect(() => {
@@ -1036,46 +871,6 @@ export default function Course() {
         }
     }, [userType, testExams]);
 
-    const handleTogglePrevExam = useCallback(async (lessonId) => {
-        try {
-            const token = localStorage.getItem('token');
-            if (!token) return;
-            setSyncingLessons(prev => new Set([...prev, lessonId]));
- 
-            // تحقق أولاً من وجود امتحان سابق
-            const check = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, { headers: { Authorization: `Bearer ${token}` } });
-            const prevExam = check.data?.organized?.previous;
-            if (!prevExam) {
-                window.alert('لا يوجد امتحان سابق لهذا الدرس. أنشئ امتحان سابق أولاً.');
-                return;
-            }
-            const current = !!prevExamEnabled[lessonId];
-            const examId = prevExamIdByLesson[lessonId] || prevExam._id;
-            const url = current
-                ? `${API_BASE_URL}/api/exams/${examId}/previous/disable`
-                : `${API_BASE_URL}/api/exams/${examId}/previous/enable`;
-            await axios.post(url, {}, { headers: { Authorization: `Bearer ${token}` } });
-            setPrevExamEnabled(prev => ({ ...prev, [lessonId]: !current }));
-            // إعادة التحقق بعد الحفظ
-            try {
-                const check2 = await axios.get(`${API_BASE_URL}/api/exams/lesson/${lessonId}`, { headers: { Authorization: `Bearer ${token}` } });
-                const enabled2 = !!check2.data?.organized?.previous?.enabled;
-                const id2 = check2.data?.organized?.previous?._id;
-                setPrevExamEnabled(prev => ({ ...prev, [lessonId]: enabled2 }));
-                if (id2) setPrevExamIdByLesson(prev => ({ ...prev, [lessonId]: id2 }));
-            } catch (_) {}
-        } catch (err) {
-            const msg = err?.response?.data?.message || 'تعذر تغيير حالة الامتحان السابق';
-            window.alert(msg);
-        } finally {
-            setSyncingLessons(prev => {
-                const next = new Set(prev);
-                next.delete(lessonId);
-                return next;
-            });
-        }
-    }, [prevExamEnabled, prevExamIdByLesson]);
-
     return <>
         <div className='font-GraphicSchool h-[100hv] w-full  flex flex-col items-center'>
             {/* Heade Section */}
@@ -1172,14 +967,6 @@ export default function Course() {
                                              {(lesson.isHidden || false) ? '👁' : '🚫'}
                                          </button>
                                          <button className='p-2 rounded-xl bg-bluetheme-500 text-white text-xl md:text-2xl font-GraphicSchool hover:bg-blue-600 transition-colors' onClick={() => handleEditClick(lesson)}><MdEdit /></button>
-                                         <button 
-                                             className='p-2 rounded-xl bg-amber-500 text-white text-xs md:text-sm font-GraphicSchool hover:bg-amber-600 transition-colors'
-                                             onClick={() => handleTogglePrevExam(lesson._id)}
-                                             disabled={syncingLessons.has(lesson._id)}
-                                             title='تفعيل/تعطيل امتحان الحصة السابقة'
-                                         >
-                                             {syncingLessons.has(lesson._id) ? 'جاري الحفظ...' : (prevExamEnabled[lesson._id] ? 'تعطيل امتحان سابق' : 'تفعيل امتحان سابق')}
-                                         </button>
                                      </div>
                                        
                                      </div>
@@ -1242,12 +1029,7 @@ export default function Course() {
                                                 canAccess = false;
                                             }
                                             
-                                            // إذا كان يمكن الوصول للدرس، نعرض زر الدخول
-                                            // تجاوز احترافي: إذا قام الأدمن بإخفاء رسالة النجاح لهذا الدرس
-                                            // نسمح بالدخول للحصة بشرط أن تكون مشتراة/مجانية
-                                            if (lessonIndex !== 0 && (isLessonPurchased || lesson.price === 0) && (lesson.showSuccessWarning === false)) {
-                                                canAccess = true;
-                                            }
+                                            
 
                                             if (canAccess) {
                                                 return (
