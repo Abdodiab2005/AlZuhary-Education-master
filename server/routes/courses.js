@@ -464,6 +464,18 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
     lesson.viewLimit = req.body.viewLimit ? parseInt(req.body.viewLimit) : lesson.viewLimit;
     lesson.viewPrice = req.body.viewPrice ? parseInt(req.body.viewPrice) : lesson.viewPrice;
     lesson.isHidden = req.body.isHidden !== undefined ? (req.body.isHidden === 'true' || req.body.isHidden === true) : lesson.isHidden;
+    if (req.body.showSuccessWarning !== undefined) {
+      const raw = req.body.showSuccessWarning;
+      lesson.showSuccessWarning = (raw === true || raw === 'true' || raw === 1 || raw === '1') ? true
+        : (raw === false || raw === 'false' || raw === 0 || raw === '0') ? false
+        : (lesson.showSuccessWarning ?? true);
+      console.log('REQ: showSuccessWarning update', {
+        courseId: req.params.courseId,
+        lessonId: req.params.lessonId,
+        raw,
+        parsed: lesson.showSuccessWarning
+      });
+    }
     // دعم تحديث hasExam عبر نفس الراوت
     if (req.body.hasExam !== undefined) {
       const raw = req.body.hasExam;
@@ -488,6 +500,11 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
       const val = (raw === true || raw === 'true' || raw === 1 || raw === '1') ? true : false;
       sets['lessons.$.hasExam'] = val;
     }
+    if (req.body.showSuccessWarning !== undefined) {
+      const raw = req.body.showSuccessWarning;
+      const val = (raw === true || raw === 'true' || raw === 1 || raw === '1') ? true : false;
+      sets['lessons.$.showSuccessWarning'] = val;
+    }
     if (Object.keys(sets).length > 0) {
       await Course.updateOne({ _id: req.params.courseId, 'lessons._id': req.params.lessonId }, { $set: sets });
     }
@@ -495,6 +512,13 @@ router.put('/:courseId/lessons/:lessonId', upload.single('image'), async (req, r
     // إعادة الجلب لضمان إرسال آخر نسخة
     const fresh = await Course.findById(req.params.courseId);
     const freshLesson = fresh.lessons.id(req.params.lessonId);
+    if (req.body.showSuccessWarning !== undefined) {
+      console.log('DB: showSuccessWarning saved', {
+        courseId: req.params.courseId,
+        lessonId: req.params.lessonId,
+        saved: freshLesson?.showSuccessWarning
+      });
+    }
     res.json(freshLesson);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
