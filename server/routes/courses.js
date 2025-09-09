@@ -787,12 +787,11 @@ router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async
         );
         
         if (previousExamScore) {
-          const percentage = (previousExamScore.score / previousExamScore.total) * 100;
-          if (percentage >= 50) {
+          if (previousExamScore.score >= 50) {
             return res.json({ 
               canAccess: true, 
               reason: 'Previous exam passed',
-              examScore: percentage
+              examScore: previousExamScore.score
             });
           }
         } else {
@@ -1001,33 +1000,35 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
     } else if (lessonActivation) {
       canAccessLesson = true;
     } else {
-      // التحقق من نجاح امتحان الدرس السابق بنسبة 50% أو أكثر
-      if (previousLessonId) {
-        const previousLesson = lessons[currentLessonIndex - 1];
+      // التحقق من نجاح Previous Exam للدرس الحالي
+      if (lessonId) {
+        // البحث عن Previous Exam للدرس الحالي
+        const Exam = require('../models/Exam');
+        const previousExam = await Exam.findOne({ 
+          lessonId: lessonId, 
+          examType: 'previous' 
+        });
         
-        // التحقق من وجود امتحان في الدرس السابق
-        if (previousLesson.hasExam === true) {
+        if (previousExam) {
+          // البحث عن نتيجة Previous Exam
           const previousExamScore = user.examScores.find(score => 
-            score.lessonId && score.lessonId.toString() === previousLessonId.toString()
+            score.examId && score.examId.toString() === previousExam._id.toString()
           );
           
           if (previousExamScore) {
-            // يمكن الوصول إذا نجح في امتحان الدرس السابق بنسبة 50% أو أكثر
+            // يمكن الوصول إذا نجح في Previous Exam بنسبة 50% أو أكثر
             const percentage = (previousExamScore.score / previousExamScore.total) * 100;
             canAccessLesson = percentage >= 50;
           } else {
-            // إذا لم يكن هناك درجة للامتحان، مقفل حتى ينجح في الامتحان
+            // إذا لم يكن هناك نتيجة للـ Previous Exam، مقفل حتى ينجح
             canAccessLesson = false;
           }
-        } else if (previousLesson.hasExam === false) {
-          // إذا كان hasExam = false صراحة، يفتح مباشرة
-          canAccessLesson = true;
         } else {
-          // إذا كان hasExam غير محدد (undefined/null)، مقفل افتراضياً
-          canAccessLesson = false;
+          // إذا لم يكن هناك Previous Exam، يفتح مباشرة
+          canAccessLesson = true;
         }
       } else {
-        // إذا لم يكن هناك درس سابق، يفتح مباشرة
+        // إذا لم يكن هناك درس، يفتح مباشرة
         canAccessLesson = true;
       }
     }
