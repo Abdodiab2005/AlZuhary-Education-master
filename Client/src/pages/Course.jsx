@@ -178,7 +178,7 @@ export default function Course() {
         const token = localStorage.getItem('token');
         if (token && location.pathname.includes('/course/')) {
             // تحديث البيانات عند العودة من الامتحان مرة واحدة فقط
-            const refreshData = async () => {
+            const refreshDataFromExam = async () => {
                 try {
                     const userRes = await axios.get(`${API_BASE_URL}/api/auth/me`, {
                         headers: { Authorization: `Bearer ${token}` }
@@ -221,7 +221,7 @@ export default function Course() {
                 }
             };
             // تأخير قليل لتجنب التحديث المتكرر
-            const timeoutId = setTimeout(refreshData, 1000);
+            const timeoutId = setTimeout(refreshDataFromExam, 1000);
             return () => clearTimeout(timeoutId);
         }
     }, [location.pathname]);
@@ -282,7 +282,7 @@ export default function Course() {
 
 
 
-    // تحديث البيانات عند العودة من صفحة الفيديو
+    // تحديث البيانات عند العودة من صفحة الفيديو أو الامتحان
     useEffect(() => {
         const handleFocus = () => {
             const token = localStorage.getItem('token');
@@ -294,6 +294,8 @@ export default function Course() {
                     setWatchedLessons(res.data.watchedLessons?.map(l => l.lessonId) || []);
                     setExamScores(res.data.examScores || []);
                     setLessonViewCounts(res.data.lessonViewCounts || []);
+                    setPurchasedLessons(res.data.purchasedLessons || []);
+                    setPurchasedCourses(res.data.purchasedCourses || []);
                     
                     // تحديث حالة الامتحانات بعد العودة
                     if (lessons.length > 0) {
@@ -310,7 +312,7 @@ export default function Course() {
         
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
-    }, [lessons, courseId]);
+    }, [lessons, courseId, updateLessonStatuses]);
 
     // تحديث lessonStatuses عند تغيير location.pathname (العودة من الامتحان)
     useEffect(() => {
@@ -1006,22 +1008,22 @@ export default function Course() {
                                                     // الدرس الأول متاح دائماً إذا كان مشترى أو مجاني
                                                     canAccess = true;
                                                 } else {
-                                                    // للدروس الأخرى، نتحقق من نجاح امتحان الدرس السابق فقط
-                                                        const previousLessonId = lessons[lessonIndex - 1]?._id;
-                                                        if (previousLessonId) {
-                                                            // البحث في examScores للدرس السابق
-                                                            const examScore = examScores.find(score => {
-                                                                if (typeof score === 'object' && score.lessonId) {
-                                                                    return score.lessonId.toString() === previousLessonId.toString();
-                                                                }
-                                                                return false;
-                                                            });
-                                                            // حساب النسبة المئوية
-                                                            const percentage = examScore ? (examScore.score / examScore.total) * 100 : 0;
-                                                            canAccess = examScore && percentage >= 50;
-                                                        } else {
-                                                            // إذا لم يكن هناك درس سابق، فتح الدرس
-                                                            canAccess = true;
+                                                    // للدروس الأخرى، نتحقق من نجاح Previous Exam للدرس الحالي
+                                                    // يجب أن نجح في Previous Exam لفتح الحصة
+                                                    // البحث في examScores للدرس الحالي (Previous Exam)
+                                                    const examScore = examScores.find(score => {
+                                                        if (typeof score === 'object' && score.lessonId) {
+                                                            return score.lessonId.toString() === lesson._id.toString();
+                                                        }
+                                                        return false;
+                                                    });
+                                                    
+                                                    // التحقق من النسبة المئوية (50% أو أكثر)
+                                                    if (examScore && examScore.score && examScore.total) {
+                                                        const percentage = (examScore.score / examScore.total) * 100;
+                                                        canAccess = percentage >= 50;
+                                                    } else {
+                                                        canAccess = false;
                                                     }
                                                 }
                                             } else {
@@ -1044,7 +1046,7 @@ export default function Course() {
                                                                 if (canAccess) {
                                                                     handleLessonAccess(lesson._id);
                                                                 } else {
-                                                                    window.alert('يجب النجاح في امتحان الحصة السابقة بنسبة 50% أو أكثر');
+                                                                    window.alert('يجب النجاح في امتحان الحصة السابقة لهذا الدرس بنسبة 50% أو أكثر');
                                                                 }
                                                             }}
                                                             disabled={getRemainingViews(lesson._id) <= 0}
