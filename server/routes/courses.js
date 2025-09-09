@@ -1013,7 +1013,8 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
           
           if (previousExamScore) {
             // يمكن الوصول إذا نجح في امتحان الدرس السابق بنسبة 50% أو أكثر
-            canAccessLesson = previousExamScore.score >= 50;
+            const percentage = (previousExamScore.score / previousExamScore.total) * 100;
+            canAccessLesson = percentage >= 50;
           } else {
             // إذا لم يكن هناك درجة للامتحان، مقفل حتى ينجح في الامتحان
             canAccessLesson = false;
