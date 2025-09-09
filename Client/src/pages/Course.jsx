@@ -1031,7 +1031,8 @@ export default function Course() {
                                             
                                             
 
-                                            if (canAccess) {
+                                            // إذا كان الدرس مشترى أو مجاني، نعرض زر الدخول
+                                            if (isLessonPurchased || lesson.price === 0) {
                                                 return (
                                                     <div className='flex flex-col items-center gap-2'>
                                                         <button
@@ -1039,7 +1040,13 @@ export default function Course() {
                                                                 ? 'bg-green-700 text-white hover:bg-green-800'
                                                                 : 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                                                 }`}
-                                                            onClick={() => handleLessonAccess(lesson._id)}
+                                                            onClick={() => {
+                                                                if (canAccess) {
+                                                                    handleLessonAccess(lesson._id);
+                                                                } else {
+                                                                    window.alert('يجب النجاح في امتحان الحصة السابقة بنسبة 50% أو أكثر');
+                                                                }
+                                                            }}
                                                             disabled={getRemainingViews(lesson._id) <= 0}
                                                         >
                                                             {getRemainingViews(lesson._id) <= 0 ? 'انتهت مرات المشاهدة' : 'دخول الحصة'}
@@ -1084,22 +1091,6 @@ export default function Course() {
                                                                 </div>
                                                             </div>
                                                         )}
-                                                    </div>
-                                                );
-                                            }
-                                            
-                                            // إذا كان الدرس مشترى ولكن لا يمكن الوصول له (لم ينجح في الامتحان السابق)
-                                            if (isLessonPurchased || lesson.price === 0) {
-                                                return (
-                                                    <div className='flex flex-col items-center gap-2'>
-                                                        <div className='bg-amber-100 border-2 border-amber-400 rounded-lg p-3 text-center max-w-[200px]'>
-                                                            <p className='text-amber-800 text-sm font-medium mb-1'>
-                                                                يجب النجاح في امتحان الحصة السابقة
-                                                            </p>
-                                                            <p className='text-amber-700 text-xs'>
-                                                                بنسبة 50% أو أكثر
-                                                            </p>
-                                                        </div>
                                                     </div>
                                                 );
                                             }
