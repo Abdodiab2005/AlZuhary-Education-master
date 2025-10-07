@@ -754,69 +754,16 @@ router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async
     const currentLessonIndex = lessons.findIndex(l => l._id.toString() === lessonId);
     const lesson = course.lessons.id(lessonId);
     
-    // إذا كان الدرس الأول، يمكن الوصول إليه دائماً
-    if (currentLessonIndex === 0) {
-      return res.json({ 
-        canAccess: true, 
-        reason: 'First lesson',
-        isFirstLesson: true 
-      });
-    }
-
-    // التحقق من تفعيل الدرس الحالي
+    // المنطق الجديد: الوصول يعتمد فقط على الشراء أو كون الدرس الأول. لا حاجة لنجاح أي امتحان
     const courseUnlocked = user.purchasedCourses.includes(courseId);
     const lessonActivation = user.purchasedLessons.find(l => 
       l.lessonId && l.lessonId.toString() === lessonId
     );
 
-    // يمكن الوصول للدرس إذا كان الكورس مفعل أو تم تفعيل الدرس
-    if (courseUnlocked || lessonActivation) {
-      return res.json({ 
-        canAccess: true, 
-        reason: 'Lesson activated'
-      });
-    }
+    const isFirstLesson = currentLessonIndex === 0;
+    const canAccess = isFirstLesson || courseUnlocked || !!lessonActivation;
 
-    // التحقق من نجاح امتحان الدرس السابق (لا يوجد تجاوز بواسطة previousLessonRequired بعد الآن)
-    const previousLesson = lessons[currentLessonIndex - 1];
-    if (previousLesson) {
-      // التحقق من وجود امتحان في الدرس السابق
-      if (previousLesson.hasExam === true) {
-        const previousExamScore = user.examScores.find(score => 
-          score.lessonId && score.lessonId.toString() === previousLesson._id.toString()
-        );
-        
-        if (previousExamScore) {
-          if (previousExamScore.score >= 50) {
-            return res.json({ 
-              canAccess: true, 
-              reason: 'Previous exam passed',
-              examScore: previousExamScore.score
-            });
-          }
-        } else {
-          // إذا لم يكن هناك درجة للامتحان، مقفل حتى ينجح في الامتحان
-          return res.json({ 
-            canAccess: false, 
-            reason: 'No previous exam score - must pass exam first'
-          });
-        }
-      } else if (previousLesson.hasExam === false) {
-        // إذا كان hasExam = false صراحة، يفتح مباشرة
-        return res.json({ 
-          canAccess: true, 
-          reason: 'No previous exam - auto pass'
-        });
-      } else {
-        // إذا كان hasExam غير محدد (undefined/null)، مقفل افتراضياً
-        return res.json({ 
-          canAccess: false, 
-          reason: 'Lesson access not configured - admin must set hasExam'
-        });
-      }
-    }
-
-    // الواجب متاح دائماً بدون شروط
+    // الواجب متاح دائماً بدون شروط أيضًا
     if (lesson.assignmentUrl) {
       return res.json({ 
         canAccess: true, 
@@ -825,10 +772,9 @@ router.get('/:courseId/lessons/:lessonId/access-check', authenticateToken, async
       });
     }
 
-    // إذا لم يكن مفعل ولم ينجح في الامتحان وليس واجب، لا يمكن الوصول
     return res.json({ 
-      canAccess: false, 
-      reason: 'Lesson not activated and exam not passed'
+      canAccess, 
+      reason: canAccess ? 'Activated or first lesson' : 'Lesson not purchased'
     });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -990,48 +936,8 @@ router.get('/:courseId/lesson-status/:lessonId', authenticateToken, async (req, 
       canTakePreviousExam = true;
     }
 
-    // التحقق من إمكانية الوصول للدرس
-    let canAccessLesson = false;
-    if (currentLessonIndex === 0) {
-      // الدرس الأول متاح دائماً
-      canAccessLesson = true;
-    } else if (courseUnlocked) {
-      canAccessLesson = true;
-    } else if (lessonActivation) {
-      canAccessLesson = true;
-    } else {
-      // التحقق من نجاح Previous Exam للدرس الحالي
-      if (lessonId) {
-        // البحث عن Previous Exam للدرس الحالي
-        const Exam = require('../models/Exam');
-        const previousExam = await Exam.findOne({ 
-          lessonId: lessonId, 
-          examType: 'previous' 
-        });
-        
-        if (previousExam) {
-          // البحث عن نتيجة Previous Exam
-          const previousExamScore = user.examScores.find(score => 
-            score.examId && score.examId.toString() === previousExam._id.toString()
-          );
-          
-          if (previousExamScore) {
-            // يمكن الوصول إذا نجح في Previous Exam بنسبة 50% أو أكثر
-            const percentage = (previousExamScore.score / previousExamScore.total) * 100;
-            canAccessLesson = percentage >= 50;
-          } else {
-            // إذا لم يكن هناك نتيجة للـ Previous Exam، مقفل حتى ينجح
-            canAccessLesson = false;
-          }
-        } else {
-          // إذا لم يكن هناك Previous Exam، يفتح مباشرة
-          canAccessLesson = true;
-        }
-      } else {
-        // إذا لم يكن هناك درس، يفتح مباشرة
-        canAccessLesson = true;
-      }
-    }
+    // التحقق من إمكانية الوصول للدرس (بدون شرط الامتحان)
+    const canAccessLesson = currentLessonIndex === 0 || courseUnlocked || !!lessonActivation;
 
     res.json({
       canAccessLesson,
