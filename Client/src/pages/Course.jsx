@@ -998,43 +998,11 @@ export default function Course() {
                                  {(showVideo || lesson.price > 0) ? (
                                      <>
                                         {(() => {
-                                                                                        // التحقق من إمكانية الوصول للدرس
-                                            let canAccess = false;
-                                            
-                                            // التحقق من أن الدرس مشترى أولاً
-                                            if (isLessonPurchased || lesson.price === 0) {
-                                                // إذا كان الدرس مشترى أو مجاني، نتحقق من الامتحان
-                                                if (lessonIndex === 0) {
-                                                    // الدرس الأول متاح دائماً إذا كان مشترى أو مجاني
-                                                    canAccess = true;
-                                                } else {
-                                                    // للدروس الأخرى، نتحقق من نجاح Previous Exam للدرس الحالي
-                                                    // يجب أن نجح في Previous Exam لفتح الحصة
-                                                    // البحث في examScores للدرس الحالي (Previous Exam)
-                                                    const examScore = examScores.find(score => {
-                                                        if (typeof score === 'object' && score.lessonId) {
-                                                            return score.lessonId.toString() === lesson._id.toString();
-                                                        }
-                                                        return false;
-                                                    });
-                                                    
-                                                    // التحقق من النسبة المئوية (50% أو أكثر)
-                                                    if (examScore && examScore.score && examScore.total) {
-                                                        const percentage = (examScore.score / examScore.total) * 100;
-                                                        canAccess = percentage >= 50;
-                                                    } else {
-                                                        canAccess = false;
-                                                    }
-                                                }
-                                            } else {
-                                                // إذا لم يكن الدرس مشترى، لا يمكن الوصول له
-                                                canAccess = false;
-                                            }
-                                            
-                                            
+                                            // الإتاحة الآن تعتمد فقط على الشراء أو المجانية، بدون شرط النجاح في الامتحان
+                                            const canAccess = isLessonPurchased || lesson.price === 0;
 
-                                            // إذا كان الدرس مشترى أو مجاني، نعرض زر الدخول
-                                            if (isLessonPurchased || lesson.price === 0) {
+                                            // إذا كان الدرس مشترى أو مجاني، نعرض زر الدخول مباشرةً
+                                            if (canAccess) {
                                                 return (
                                                     <div className='flex flex-col items-center gap-2'>
                                                         <button
@@ -1043,11 +1011,7 @@ export default function Course() {
                                                                 : 'bg-gray-400 text-gray-600 cursor-not-allowed'
                                                                 }`}
                                                             onClick={() => {
-                                                                if (canAccess) {
-                                                                    handleLessonAccess(lesson._id);
-                                                                } else {
-                                                                    window.alert('يجب النجاح في امتحان الحصة السابقة لهذا الدرس بنسبة 50% أو أكثر');
-                                                                }
+                                                                handleLessonAccess(lesson._id);
                                                             }}
                                                             disabled={getRemainingViews(lesson._id) <= 0}
                                                         >
@@ -1063,7 +1027,7 @@ export default function Course() {
                                                                     سعر المرة: {lesson.viewPrice || 10} جنيه
                                                                 </span>
                                                                 <div className='flex items-center gap-1'>
-                                                                                                                                                                                                             <input 
+                                                                    <input 
                                                                         type="number" 
                                                                         min="1" 
                                                                         max="10"
@@ -1096,7 +1060,7 @@ export default function Course() {
                                                     </div>
                                                 );
                                             }
-                                            
+
                                             // إذا لم يكن الدرس مشترى، نعرض زر الشراء
                                             return (
                                                 <button onClick={() => { setSelectedLesson(lesson); setAlert(true); }}>

@@ -30,22 +30,8 @@ export default function Lectuer() {
                 return;
             }
 
-            try {
-                const response = await axios.get(`${API_BASE_URL}/api/courses/${courseId}/lessons/${lessonId}/access-check`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                
-                if (!response.data.canAccess) {
-                    alert('🔒 لا يمكن الوصول لهذه الحصة\nيجب النجاح في امتحان الحصة السابقة بنسبة 50% أو أكثر أولاً');
-                    navigate(`/course/${courseId}`);
-                    return;
-                }
-                
-                setAccessChecked(true);
-            } catch (err) {
-                alert('حدث خطأ في التحقق من إمكانية الوصول للحصة');
-                navigate(`/course/${courseId}`);
-            }
+            // السماح بالوصول مباشرةً بدون شرط الامتحان
+            setAccessChecked(true);
         };
 
         checkAccess();
